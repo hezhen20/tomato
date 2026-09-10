@@ -35,7 +35,7 @@ class LoginPage(QWidget):
         title.setAlignment(Qt.AlignCenter)
         card_layout.addWidget(title)
 
-        subtitle = QLabel("高对比的本地时间记录")
+        subtitle = QLabel("轻量的桌面时间追踪工具")
         subtitle.setObjectName("subtitleLabel")
         subtitle.setAlignment(Qt.AlignCenter)
         card_layout.addWidget(subtitle)

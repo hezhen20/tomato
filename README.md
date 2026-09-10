@@ -29,11 +29,13 @@ tomato/
 │       ├── floating_ball.py # 悬浮球
 │       └── style.qss        # 深色主题样式
 ├── tests/                   # 核心逻辑测试
+├── dev.py                   # 开发热重载入口
 ├── main.py                  # 源码运行入口
 ├── main.pyw                 # Windows 无控制台入口
 ├── build.bat                # Windows 打包脚本
 ├── build.sh                 # macOS / Linux 打包脚本
-└── requirements.txt         # 运行依赖
+├── requirements.txt         # 运行依赖
+└── requirements-dev.txt     # 开发依赖
 ```
 
 ## 环境要求
@@ -84,6 +86,8 @@ tomato/
    ```powershell
    python main.pyw
    ```
+
+   应用只允许一个实例运行。重复启动时不会创建第二个窗口，而会恢复并聚焦已经运行的窗口。
 
 ## 使用说明
 
@@ -180,12 +184,24 @@ python -m unittest discover -s tests
 
 ## 开发说明
 
-常见开发流程：
+安装开发依赖：
 
 ```bash
 python -m venv .venv
-pip install -r requirements.txt
-python main.py
+pip install -r requirements-dev.txt
+```
+
+使用热重载模式启动：
+
+```bash
+python dev.py
+```
+
+修改 Python 源码或 QSS 样式后，开发进程会自动结束旧应用并启动新应用。这个机制采用完整进程重启，正在进行但尚未自动保存的最近计时可能丢失，因此热重载只用于开发调试。
+
+运行测试：
+
+```bash
 python -m unittest discover -s tests
 ```
 

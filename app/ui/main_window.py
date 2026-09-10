@@ -199,11 +199,16 @@ class MainWindow(QMainWindow):
         if reason == QSystemTrayIcon.DoubleClick:
             self._show_window()
 
-    def _show_window(self):
+    @Slot()
+    def show_and_activate(self):
         self.showNormal()
+        self.raise_()
         self.activateWindow()
         self._floating_ball.hide()
         self._float_sync_timer.stop()
+
+    def _show_window(self):
+        self.show_and_activate()
 
     def _quit(self):
         if hasattr(self, "_main_page") and self._main_page._running:

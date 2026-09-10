@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
 
 from app.database import init_db
+from app.single_instance import SingleInstance
 from app.ui.main_window import MainWindow
 
 
@@ -22,17 +22,24 @@ def load_stylesheet() -> str:
 
 
 def main():
-    init_db()
-
     app = QApplication(sys.argv)
+    app.setApplicationName("Tomato Timer")
     app.setQuitOnLastWindowClosed(False)
+
+    single_instance = SingleInstance(parent=app)
+    if not single_instance.acquire_or_notify():
+        return 0
+
+    init_db()
     app.setStyleSheet(load_stylesheet())
 
     window = MainWindow()
+    single_instance.activation_requested.connect(window.show_and_activate)
+    app.aboutToQuit.connect(single_instance.close)
     window.show()
 
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
