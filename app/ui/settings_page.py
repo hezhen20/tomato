@@ -1,0 +1,570 @@
+"""设置页面 - 快捷键配置 + 模式管理 + 修改密码"""
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QKeyEvent
+from PySide6.QtWidgets import (
+    QColorDialog,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app.database import add_mode, change_password, delete_mode, get_modes, get_setting, set_setting, verify_user
+from app.hotkeys import MODE_ACTION_PREFIX, mode_action_name
+from app.ui.colors import color_swatch_style
+
+_KEY_NAMES = {
+    Qt.Key_Control: "Ctrl",
+    Qt.Key_Alt: "Alt",
+    Qt.Key_Shift: "Shift",
+    Qt.Key_Meta: "Win",
+}
+_MOD_KEYS = {Qt.Key_Control, Qt.Key_Alt, Qt.Key_Shift, Qt.Key_Meta}
+FLOATING_TIME_MASK_KEY = "floating_time_glass_mask"
+FLOATING_TIME_MASK_DEFAULT = "1"
+
+
+def floating_time_mask_enabled() -> bool:
+    return get_setting(FLOATING_TIME_MASK_KEY, FLOATING_TIME_MASK_DEFAULT).strip() != "0"
+
+
+class HotkeyRecorder(QPushButton):
+    """点击后进入录入状态，按下组合键自动记录。"""
+
+    hotkey_changed = Signal(str)
+
+    def __init__(self, initial_text: str = ""):
+        super().__init__(initial_text or "点击设置快捷键")
+        self._recording = False
+        self._hotkey_display = initial_text
+        self._held_modifiers = set()
+        self.setMinimumWidth(160)
+        self.setStyleSheet(self._normal_style())
+        self.clicked.connect(self._start_recording)
+
+    def get_hotkey_display(self) -> str:
+        return self._hotkey_display
+
+    def set_hotkey_display(self, text: str):
+        self._hotkey_display = text
+        if not self._recording:
+            self.setText(text or "点击设置快捷键")
+
+    def _normal_style(self):
+        return (
+            "background-color: #0A0F1C; color: #F8FAFC; "
+            "border: 1px solid #243047; border-radius: 9px; "
+            "text-align: center; padding: 7px 12px;"
+        )
+
+    def _recording_style(self):
+        return (
+            "background-color: #102A24; color: #00F5A0; "
+            "border: 2px solid #00F5A0; border-radius: 9px; "
+            "text-align: center; padding: 7px 12px;"
+        )
+
+    def _start_recording(self):
+        self._recording = True
+        self._held_modifiers.clear()
+        self.setText("请按下快捷键...")
+        self.setStyleSheet(self._recording_style())
+        self.grabKeyboard()
+
+    def _stop_recording(self):
+        self._recording = False
+        self.setStyleSheet(self._normal_style())
+        self.releaseKeyboard()
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if not self._recording:
+            super().keyPressEvent(event)
+            return
+
+        key = event.key()
+
+        if key == Qt.Key_Escape:
+            self.setText(self._hotkey_display or "点击设置快捷键")
+            self._stop_recording()
+            return
+
+        if key in _MOD_KEYS:
+            self._held_modifiers.add(key)
+            parts = [_KEY_NAMES[k] for k in sorted(self._held_modifiers)]
+            self.setText("+".join(parts) + "+...")
+            return
+
+        if not self._held_modifiers:
+            self.setText("需要 Ctrl/Alt/Shift 组合")
+            return
+
+        parts = []
+        for mod in [Qt.Key_Control, Qt.Key_Alt, Qt.Key_Shift, Qt.Key_Meta]:
+            if mod in self._held_modifiers:
+                parts.append(_KEY_NAMES[mod])
+
+        key_text = event.text().upper()
+        if not key_text.strip():
+            key_text = _special_key_name(key)
+        if not key_text:
+            return
+
+        parts.append(key_text)
+        combo = "+".join(parts)
+
+        self._hotkey_display = combo
+        self.setText(combo)
+        self._stop_recording()
+        self.hotkey_changed.emit(combo)
+
+    def keyReleaseEvent(self, event: QKeyEvent):
+        if self._recording and event.key() in _MOD_KEYS:
+            self._held_modifiers.discard(event.key())
+        super().keyReleaseEvent(event)
+
+    def focusOutEvent(self, event):
+        if self._recording:
+            self.setText(self._hotkey_display or "点击设置快捷键")
+            self._stop_recording()
+        super().focusOutEvent(event)
+
+
+def _special_key_name(key: int) -> str:
+    names = {
+        Qt.Key_F1: "F1",
+        Qt.Key_F2: "F2",
+        Qt.Key_F3: "F3",
+        Qt.Key_F4: "F4",
+        Qt.Key_F5: "F5",
+        Qt.Key_F6: "F6",
+        Qt.Key_F7: "F7",
+        Qt.Key_F8: "F8",
+        Qt.Key_F9: "F9",
+        Qt.Key_F10: "F10",
+        Qt.Key_F11: "F11",
+        Qt.Key_F12: "F12",
+        Qt.Key_Space: "Space",
+        Qt.Key_Return: "Enter",
+        Qt.Key_Tab: "Tab",
+        Qt.Key_Backspace: "Backspace",
+        Qt.Key_Delete: "Delete",
+        Qt.Key_Home: "Home",
+        Qt.Key_End: "End",
+        Qt.Key_PageUp: "PageUp",
+        Qt.Key_PageDown: "PageDown",
+        Qt.Key_Up: "Up",
+        Qt.Key_Down: "Down",
+        Qt.Key_Left: "Left",
+        Qt.Key_Right: "Right",
+        Qt.Key_Insert: "Insert",
+    }
+    return names.get(key, "")
+
+
+class SettingsPage(QWidget):
+    modes_changed = Signal()
+    hotkeys_changed = Signal()
+    floating_settings_changed = Signal(bool)
+
+    def __init__(self, hotkey_manager, username: str):
+        super().__init__()
+        self._hotkey_manager = hotkey_manager
+        self._username = username
+        self.hotkey_recorders = {}
+        self._mode_hotkey_row_widgets = []
+        self._setup_ui()
+
+    def _setup_ui(self):
+        self._hotkey_manager.sync_mode_hotkeys()
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        tabs = QTabWidget()
+        tabs.addTab(self._build_modes_tab(), "模式管理")
+        tabs.addTab(self._build_hotkeys_tab(), "快捷键")
+        tabs.addTab(self._build_floating_tab(), "悬浮窗")
+        tabs.addTab(self._build_password_tab(), "修改密码")
+        layout.addWidget(tabs)
+
+    def _build_modes_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(12)
+
+        add_layout = QHBoxLayout()
+        self.new_mode_input = QLineEdit()
+        self.new_mode_input.setPlaceholderText("新模式名称")
+        add_layout.addWidget(self.new_mode_input)
+
+        self._new_color = "#FF9800"
+        self.color_btn = QPushButton()
+        self.color_btn.setProperty("class", "colorBtn")
+        self.color_btn.setFixedSize(32, 32)
+        self.color_btn.setStyleSheet(color_swatch_style(self._new_color))
+        self.color_btn.clicked.connect(self._pick_color)
+        add_layout.addWidget(self.color_btn)
+
+        add_btn = QPushButton("添加")
+        add_btn.setObjectName("primaryButton")
+        add_btn.clicked.connect(self._add_mode)
+        add_layout.addWidget(add_btn)
+        layout.addLayout(add_layout)
+
+        self.modes_table = QTableWidget()
+        self.modes_table.setColumnCount(3)
+        self.modes_table.setHorizontalHeaderLabels(["名称", "颜色", "操作"])
+        self.modes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.modes_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self.modes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self.modes_table.setColumnWidth(1, 60)
+        self.modes_table.setColumnWidth(2, 80)
+        self.modes_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.modes_table.setAlternatingRowColors(True)
+        self.modes_table.setShowGrid(False)
+        self.modes_table.verticalHeader().setVisible(False)
+        self.modes_table.verticalHeader().setDefaultSectionSize(40)
+        layout.addWidget(self.modes_table)
+
+        self._refresh_modes_table()
+        return widget
+
+    def _pick_color(self):
+        color = QColorDialog.getColor(QColor(self._new_color), self, "选择颜色")
+        if color.isValid():
+            self._new_color = color.name()
+            self.color_btn.setStyleSheet(color_swatch_style(self._new_color))
+
+    def _add_mode(self):
+        name = self.new_mode_input.text().strip()
+        if not name:
+            return
+
+        try:
+            add_mode(name, self._new_color)
+            self.new_mode_input.clear()
+            self._refresh_modes_table()
+            self.modes_changed.emit()
+        except Exception as exc:
+            QMessageBox.warning(self, "错误", f"添加失败: {exc}")
+
+    def _delete_mode(self, mode_id: int):
+        reply = QMessageBox.question(self, "确认", "确定删除该模式？相关记录不会被删除。")
+        if reply != QMessageBox.Yes:
+            return
+
+        delete_mode(mode_id)
+        self._refresh_modes_table()
+        self.modes_changed.emit()
+
+    def _refresh_modes_table(self):
+        modes = get_modes()
+        self.modes_table.setRowCount(len(modes))
+
+        for index, mode in enumerate(modes):
+            self.modes_table.setItem(index, 0, QTableWidgetItem(mode["name"]))
+
+            color_item = QTableWidgetItem("  ")
+            color_item.setBackground(QColor(mode["color"]))
+            color_item.setTextAlignment(Qt.AlignCenter)
+            self.modes_table.setItem(index, 1, color_item)
+
+            del_btn = QPushButton("删除")
+            del_btn.setObjectName("dangerButton")
+            del_btn.setFixedSize(58, 30)
+            del_btn.clicked.connect(lambda _, mid=mode["id"]: self._delete_mode(mid))
+
+            del_container = QWidget()
+            del_layout = QHBoxLayout(del_container)
+            del_layout.setContentsMargins(0, 0, 0, 0)
+            del_layout.setSpacing(0)
+            del_layout.addWidget(del_btn, alignment=Qt.AlignCenter)
+            self.modes_table.setCellWidget(index, 2, del_container)
+
+    def _build_hotkeys_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(12)
+
+        hint = QLabel("点击按钮后直接按下快捷键组合即可录入。\n按 Esc 取消录入。")
+        hint.setProperty("class", "mutedLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        fixed_actions = [
+            ("pause_resume", "暂停/继续"),
+            ("stop", "结束计时"),
+        ]
+        for action, label in fixed_actions:
+            current = self._hotkey_manager.get_hotkey(action)
+            layout.addWidget(
+                self._build_hotkey_row(
+                    action,
+                    label,
+                    self._pynput_to_display(current),
+                )
+            )
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("模式快捷键:"))
+
+        self._mode_hotkeys_container = QWidget()
+        self._mode_hotkeys_layout = QVBoxLayout(self._mode_hotkeys_container)
+        self._mode_hotkeys_layout.setContentsMargins(0, 0, 0, 0)
+        self._mode_hotkeys_layout.setSpacing(8)
+        layout.addWidget(self._mode_hotkeys_container)
+
+        save_btn = QPushButton("保存快捷键")
+        save_btn.setObjectName("primaryButton")
+        save_btn.clicked.connect(self._save_hotkeys)
+        layout.addWidget(save_btn)
+
+        layout.addStretch()
+        self.refresh_mode_hotkeys()
+        return widget
+
+    def _build_hotkey_row(self, action: str, label_text: str, current_text: str) -> QWidget:
+        row_widget = QWidget()
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(0, 0, 0, 0)
+
+        label = QLabel(label_text)
+        label.setMinimumWidth(120)
+        row.addWidget(label)
+
+        recorder = HotkeyRecorder(current_text)
+        self.hotkey_recorders[action] = recorder
+        row.addWidget(recorder)
+
+        clear_btn = QPushButton("清除")
+        clear_btn.setObjectName("ghostButton")
+        clear_btn.setFixedWidth(50)
+        clear_btn.clicked.connect(lambda _, a=action: self._clear_hotkey(a))
+        row.addWidget(clear_btn)
+
+        return row_widget
+
+    def refresh_mode_hotkeys(self):
+        self._hotkey_manager.sync_mode_hotkeys()
+
+        if not hasattr(self, "_mode_hotkeys_layout"):
+            return
+
+        for widget in self._mode_hotkey_row_widgets:
+            widget.deleteLater()
+        self._mode_hotkey_row_widgets.clear()
+
+        for action in list(self.hotkey_recorders):
+            if action.startswith(MODE_ACTION_PREFIX):
+                del self.hotkey_recorders[action]
+
+        for mode in get_modes():
+            action = mode_action_name(mode["name"])
+            current = self._hotkey_manager.get_hotkey(action)
+            row_widget = self._build_hotkey_row(
+                action,
+                f"切换到「{mode['name']}」",
+                self._pynput_to_display(current),
+            )
+            self._mode_hotkeys_layout.addWidget(row_widget)
+            self._mode_hotkey_row_widgets.append(row_widget)
+
+    def _clear_hotkey(self, action: str):
+        if action in self.hotkey_recorders:
+            self.hotkey_recorders[action].set_hotkey_display("")
+
+    def _save_hotkeys(self):
+        combo_map = {}
+        conflicts = []
+
+        for action, recorder in self.hotkey_recorders.items():
+            combo = recorder.get_hotkey_display().strip()
+            if not combo:
+                continue
+
+            combo_lower = combo.lower()
+            if combo_lower in combo_map:
+                other = combo_map[combo_lower]
+                conflicts.append((combo, self._action_label(other), self._action_label(action)))
+            else:
+                combo_map[combo_lower] = action
+
+        if conflicts:
+            msg = "检测到快捷键冲突:\n\n"
+            for combo, action_1, action_2 in conflicts:
+                msg += f"  {combo}  同时绑定了「{action_1}」和「{action_2}」\n"
+            msg += "\n请修改后再保存。"
+            QMessageBox.warning(self, "快捷键冲突", msg)
+            return
+
+        self._hotkey_manager.sync_mode_hotkeys()
+        for action, recorder in self.hotkey_recorders.items():
+            text = recorder.get_hotkey_display().strip()
+            self._hotkey_manager.set_hotkey(action, self._display_to_pynput(text))
+
+        self.hotkeys_changed.emit()
+        QMessageBox.information(self, "成功", "快捷键已保存")
+
+    def _action_label(self, action: str) -> str:
+        labels = {
+            "pause_resume": "暂停/继续",
+            "stop": "结束计时",
+        }
+        if action in labels:
+            return labels[action]
+        if action.startswith(MODE_ACTION_PREFIX):
+            return f"切换到「{action[len(MODE_ACTION_PREFIX):]}」"
+        return action
+
+    def _pynput_to_display(self, value: str) -> str:
+        if not value:
+            return ""
+
+        return (
+            value.replace("<ctrl>", "Ctrl")
+            .replace("<alt>", "Alt")
+            .replace("<shift>", "Shift")
+            .replace("<meta>", "Win")
+            .replace("<", "")
+            .replace(">", "")
+        )
+
+    def _display_to_pynput(self, value: str) -> str:
+        if not value:
+            return ""
+
+        result = []
+        for part in [piece.strip().lower() for piece in value.split("+")]:
+            if part in ("ctrl", "control"):
+                result.append("<ctrl>")
+            elif part == "alt":
+                result.append("<alt>")
+            elif part == "shift":
+                result.append("<shift>")
+            elif part in ("win", "meta"):
+                result.append("<meta>")
+            else:
+                result.append(part)
+        return "+".join(result)
+
+    def _build_floating_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(14)
+
+        hint = QLabel("关闭主窗口后会进入悬浮小组件。这里的设置会立即应用，无需重启。")
+        hint.setProperty("class", "mutedLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        mask_card = QFrame()
+        mask_card.setObjectName("settingsCard")
+        card_layout = QHBoxLayout(mask_card)
+        card_layout.setContentsMargins(16, 14, 16, 14)
+        card_layout.setSpacing(16)
+
+        copy_layout = QVBoxLayout()
+        copy_layout.setContentsMargins(0, 0, 0, 0)
+        copy_layout.setSpacing(6)
+
+        title = QLabel("时间玻璃遮罩")
+        title.setProperty("class", "sectionTitle")
+        copy_layout.addWidget(title)
+
+        description = QLabel("开启后，悬浮窗会用高不透明磨砂层遮住时间数字，降低读数冲动，同时保留模式和运行状态。")
+        description.setProperty("class", "mutedLabel")
+        description.setWordWrap(True)
+        copy_layout.addWidget(description)
+
+        card_layout.addLayout(copy_layout, stretch=1)
+
+        enabled = floating_time_mask_enabled()
+        self.floating_time_mask_toggle = QPushButton()
+        self.floating_time_mask_toggle.setObjectName("toggleButton")
+        self.floating_time_mask_toggle.setCheckable(True)
+        self.floating_time_mask_toggle.setFixedWidth(92)
+        self.floating_time_mask_toggle.setChecked(enabled)
+        self._set_floating_time_mask_toggle_text(enabled)
+        self.floating_time_mask_toggle.toggled.connect(self._on_floating_time_mask_toggled)
+        card_layout.addWidget(self.floating_time_mask_toggle, alignment=Qt.AlignTop)
+
+        layout.addWidget(mask_card)
+        layout.addStretch()
+        return widget
+
+    def _set_floating_time_mask_toggle_text(self, enabled: bool):
+        self.floating_time_mask_toggle.setText("已开启" if enabled else "已关闭")
+
+    def _on_floating_time_mask_toggled(self, enabled: bool):
+        set_setting(FLOATING_TIME_MASK_KEY, "1" if enabled else "0")
+        self._set_floating_time_mask_toggle_text(enabled)
+        self.floating_settings_changed.emit(enabled)
+
+    def _build_password_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(12)
+
+        self.old_pw = QLineEdit()
+        self.old_pw.setPlaceholderText("当前密码")
+        self.old_pw.setEchoMode(QLineEdit.Password)
+        self.old_pw.setFixedWidth(280)
+        layout.addWidget(self.old_pw, alignment=Qt.AlignCenter)
+
+        self.new_pw = QLineEdit()
+        self.new_pw.setPlaceholderText("新密码")
+        self.new_pw.setEchoMode(QLineEdit.Password)
+        self.new_pw.setFixedWidth(280)
+        layout.addWidget(self.new_pw, alignment=Qt.AlignCenter)
+
+        self.new_pw2 = QLineEdit()
+        self.new_pw2.setPlaceholderText("确认新密码")
+        self.new_pw2.setEchoMode(QLineEdit.Password)
+        self.new_pw2.setFixedWidth(280)
+        layout.addWidget(self.new_pw2, alignment=Qt.AlignCenter)
+
+        self.pw_msg = QLabel("")
+        self.pw_msg.setObjectName("msgLabel")
+        self.pw_msg.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.pw_msg)
+
+        btn = QPushButton("修改密码")
+        btn.setObjectName("primaryButton")
+        btn.setFixedWidth(280)
+        btn.clicked.connect(self._change_password)
+        layout.addWidget(btn, alignment=Qt.AlignCenter)
+
+        layout.addStretch()
+        return widget
+
+    def _change_password(self):
+        old = self.old_pw.text().strip()
+        new = self.new_pw.text().strip()
+        new2 = self.new_pw2.text().strip()
+
+        if not old or not new:
+            self.pw_msg.setText("请填写所有字段")
+            return
+        if new != new2:
+            self.pw_msg.setText("两次密码不一致")
+            return
+        if not verify_user(self._username, old):
+            self.pw_msg.setText("当前密码错误")
+            return
+
+        change_password(self._username, new)
+        self.pw_msg.setStyleSheet("color: #00F5A0;")
+        self.pw_msg.setText("密码修改成功")
+        self.old_pw.clear()
+        self.new_pw.clear()
+        self.new_pw2.clear()
