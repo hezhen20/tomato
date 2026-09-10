@@ -2,12 +2,17 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QTabWidget, QHeaderView, QFrame,
+    QToolTip, QSizePolicy,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QCursor
 from datetime import date, timedelta
 
-from app.database import get_daily_summary, get_range_summary, get_records_for_date
+from app.database import (
+    PERIOD_KEYS,
+    PERIOD_LABELS,
+    get_range_period_summary,
+)
 from app.ui.colors import readable_color
 
 
@@ -18,6 +23,27 @@ def format_duration(seconds: int) -> str:
         return f"{h}h {m}m"
     return f"{m}m"
 
+
+def format_period_detail(periods: dict) -> str:
+    return "\n".join(
+        f"{PERIOD_LABELS[key]} {format_duration(int(periods.get(key, 0) or 0))}"
+        for key in PERIOD_KEYS
+    )
+
+
+PERIOD_TIME_RANGES = {
+    "morning": "04:00-12:00",
+    "afternoon": "12:00-18:00",
+    "evening": "18:00-04:00",
+}
+
+PERIOD_ICONS = {
+    "morning": "☀",
+    "afternoon": "◐",
+    "evening": "☾",
+}
+
+DETAIL_COLUMN_INDEX = 2
 
 WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
@@ -69,18 +95,11 @@ class HistoryPage(QWidget):
         self.day_summary_layout = QVBoxLayout()
         layout.addLayout(self.day_summary_layout)
 
-        # 详细记录表
-        self.day_table = QTableWidget()
-        self.day_table.setColumnCount(4)
-        self.day_table.setHorizontalHeaderLabels(["模式", "开始", "结束", "时长"])
-        self.day_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.day_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.day_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.day_table.setAlternatingRowColors(True)
-        self.day_table.setShowGrid(False)
-        self.day_table.verticalHeader().setVisible(False)
-        self.day_table.verticalHeader().setDefaultSectionSize(36)
-        layout.addWidget(self.day_table)
+        # 分时段卡片
+        self.day_period_layout = QHBoxLayout()
+        self.day_period_layout.setSpacing(12)
+        layout.addLayout(self.day_period_layout)
+        layout.addStretch()
 
         return w
 
@@ -114,8 +133,9 @@ class HistoryPage(QWidget):
 
         # 每日柱状图（用文本模拟）
         self.week_table = QTableWidget()
-        self.week_table.setColumnCount(3)
-        self.week_table.setHorizontalHeaderLabels(["日期", "模式", "时长"])
+        self.week_table.setColumnCount(4)
+        self.week_table.setHorizontalHeaderLabels(["日期", "模式", "明细", "时长"])
+        self.week_table.setWordWrap(False)
         self.week_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.week_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.week_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -123,6 +143,10 @@ class HistoryPage(QWidget):
         self.week_table.setShowGrid(False)
         self.week_table.verticalHeader().setVisible(False)
         self.week_table.verticalHeader().setDefaultSectionSize(36)
+        self.week_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.week_table.itemClicked.connect(
+            lambda item: self._show_period_detail_tooltip(self.week_table, item)
+        )
         layout.addWidget(self.week_table)
 
         return w
@@ -155,8 +179,9 @@ class HistoryPage(QWidget):
         layout.addLayout(self.month_summary_layout)
 
         self.month_table = QTableWidget()
-        self.month_table.setColumnCount(3)
-        self.month_table.setHorizontalHeaderLabels(["日期", "模式", "时长"])
+        self.month_table.setColumnCount(4)
+        self.month_table.setHorizontalHeaderLabels(["日期", "模式", "明细", "时长"])
+        self.month_table.setWordWrap(False)
         self.month_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.month_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.month_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -164,6 +189,10 @@ class HistoryPage(QWidget):
         self.month_table.setShowGrid(False)
         self.month_table.verticalHeader().setVisible(False)
         self.month_table.verticalHeader().setDefaultSectionSize(36)
+        self.month_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.month_table.itemClicked.connect(
+            lambda item: self._show_period_detail_tooltip(self.month_table, item)
+        )
         layout.addWidget(self.month_table)
 
         return w
@@ -194,22 +223,17 @@ class HistoryPage(QWidget):
             wd = WEEKDAYS[d.weekday()]
             self.day_label.setText(f"{d.strftime('%Y/%m/%d')} {wd}")
 
+        data = get_range_period_summary(d, d)
+        day_data = data.get(d.isoformat(), {})
+
         # 汇总
         self._clear_layout(self.day_summary_layout)
-        summary = get_daily_summary(d)
-        total = sum(v["seconds"] for v in summary.values())
-        self._add_summary_row(self.day_summary_layout, summary, total)
+        total = sum(v["seconds"] for v in day_data.values())
+        self._add_summary_row(self.day_summary_layout, day_data, total)
 
-        # 详细记录
-        records = get_records_for_date(d)
-        self.day_table.setRowCount(len(records))
-        for i, r in enumerate(records):
-            self.day_table.setItem(i, 0, QTableWidgetItem(r["mode_name"]))
-            start = r["start_time"][11:19] if r["start_time"] else ""
-            end = r["end_time"][11:19] if r["end_time"] else "进行中"
-            self.day_table.setItem(i, 1, QTableWidgetItem(start))
-            self.day_table.setItem(i, 2, QTableWidgetItem(end))
-            self.day_table.setItem(i, 3, QTableWidgetItem(format_duration(r["duration_seconds"])))
+        # 分时段卡片
+        self._clear_layout(self.day_period_layout)
+        self._add_period_cards(day_data)
 
     # ---- 周视图 ----
     def _nav_week(self, delta):
@@ -222,7 +246,7 @@ class HistoryPage(QWidget):
         sunday = monday + timedelta(days=6)
         self.week_label.setText(f"{monday.strftime('%m/%d')} - {sunday.strftime('%m/%d')}")
 
-        data = get_range_summary(monday, sunday)
+        data = get_range_period_summary(monday, sunday)
 
         # 汇总
         self._clear_layout(self.week_summary_layout)
@@ -239,12 +263,19 @@ class HistoryPage(QWidget):
         rows = []
         for day_str in sorted(data.keys()):
             for name, info in data[day_str].items():
-                rows.append((day_str, name, info["seconds"]))
+                rows.append((day_str, name, info["periods"], info["seconds"]))
         self.week_table.setRowCount(len(rows))
-        for i, (day_str, name, secs) in enumerate(rows):
+        for i, (day_str, name, periods, secs) in enumerate(rows):
             self.week_table.setItem(i, 0, QTableWidgetItem(day_str))
             self.week_table.setItem(i, 1, QTableWidgetItem(name))
-            self.week_table.setItem(i, 2, QTableWidgetItem(format_duration(secs)))
+            detail = self._format_period_detail(periods)
+            detail_item = QTableWidgetItem("查看")
+            detail_item.setToolTip(detail)
+            detail_item.setData(Qt.UserRole, detail)
+            detail_item.setForeground(QColor("#7DF9FF"))
+            detail_item.setTextAlignment(Qt.AlignCenter)
+            self.week_table.setItem(i, 2, detail_item)
+            self.week_table.setItem(i, 3, QTableWidgetItem(format_duration(secs)))
 
     # ---- 月视图 ----
     def _nav_month(self, delta):
@@ -268,7 +299,7 @@ class HistoryPage(QWidget):
             last_day = date(y, m + 1, 1) - timedelta(days=1)
         first_day = date(y, m, 1)
 
-        data = get_range_summary(first_day, last_day)
+        data = get_range_period_summary(first_day, last_day)
 
         self._clear_layout(self.month_summary_layout)
         merged = {}
@@ -283,12 +314,19 @@ class HistoryPage(QWidget):
         rows = []
         for day_str in sorted(data.keys()):
             for name, info in data[day_str].items():
-                rows.append((day_str, name, info["seconds"]))
+                rows.append((day_str, name, info["periods"], info["seconds"]))
         self.month_table.setRowCount(len(rows))
-        for i, (day_str, name, secs) in enumerate(rows):
+        for i, (day_str, name, periods, secs) in enumerate(rows):
             self.month_table.setItem(i, 0, QTableWidgetItem(day_str))
             self.month_table.setItem(i, 1, QTableWidgetItem(name))
-            self.month_table.setItem(i, 2, QTableWidgetItem(format_duration(secs)))
+            detail = self._format_period_detail(periods)
+            detail_item = QTableWidgetItem("查看")
+            detail_item.setToolTip(detail)
+            detail_item.setData(Qt.UserRole, detail)
+            detail_item.setForeground(QColor("#7DF9FF"))
+            detail_item.setTextAlignment(Qt.AlignCenter)
+            self.month_table.setItem(i, 2, detail_item)
+            self.month_table.setItem(i, 3, QTableWidgetItem(format_duration(secs)))
 
     # ---- 工具方法 ----
     def _clear_layout(self, layout):
@@ -298,6 +336,86 @@ class HistoryPage(QWidget):
                 item.widget().deleteLater()
             elif item.layout():
                 self._clear_layout(item.layout())
+
+    def _format_period_detail(self, periods: dict) -> str:
+        return format_period_detail(periods)
+
+    def _show_period_detail_tooltip(self, table: QTableWidget, item: QTableWidgetItem):
+        if not item or item.column() != DETAIL_COLUMN_INDEX:
+            return
+        detail = item.data(Qt.UserRole) or item.toolTip()
+        if detail:
+            QToolTip.showText(QCursor.pos(), detail, table)
+
+    def _add_period_cards(self, day_data: dict):
+        for period_key in PERIOD_KEYS:
+            self.day_period_layout.addWidget(self._build_period_card(period_key, day_data))
+
+    def _build_period_card(self, period_key: str, day_data: dict) -> QFrame:
+        card = QFrame()
+        card.setObjectName("periodCard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        title = QLabel(f"{PERIOD_ICONS[period_key]} {PERIOD_LABELS[period_key]}")
+        title.setProperty("class", "periodTitle")
+        layout.addWidget(title)
+
+        time_range = QLabel(PERIOD_TIME_RANGES[period_key])
+        time_range.setProperty("class", "periodRange")
+        layout.addWidget(time_range)
+
+        total_seconds = sum(
+            int(info["periods"].get(period_key, 0) or 0)
+            for info in day_data.values()
+        )
+        total = QLabel(format_duration(total_seconds))
+        total.setObjectName("periodTotalLabel")
+        layout.addWidget(total)
+
+        active_modes = [
+            (name, info)
+            for name, info in day_data.items()
+            if int(info["periods"].get(period_key, 0) or 0) > 0
+        ]
+
+        if not active_modes:
+            empty = QLabel("暂无记录")
+            empty.setProperty("class", "emptyState")
+            layout.addWidget(empty)
+        else:
+            for name, info in active_modes:
+                layout.addWidget(self._build_period_mode_row(name, info, period_key))
+        layout.addStretch()
+
+        return card
+
+    def _build_period_mode_row(self, name: str, info: dict, period_key: str) -> QWidget:
+        row_widget = QWidget()
+        row_widget.setProperty("class", "periodModeRow")
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(10, 6, 10, 6)
+        row.setSpacing(6)
+
+        display_color = readable_color(info["color"])
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color: {display_color}; font-size: 14px;")
+        row.addWidget(dot)
+
+        name_lbl = QLabel(name)
+        name_lbl.setProperty("class", "periodModeName")
+        row.addWidget(name_lbl)
+        row.addStretch()
+
+        seconds = int(info["periods"].get(period_key, 0) or 0)
+        duration_lbl = QLabel(format_duration(seconds))
+        duration_lbl.setStyleSheet(f"color: {display_color}; font-size: 13px; font-weight: 700;")
+        row.addWidget(duration_lbl)
+
+        return row_widget
 
     def _add_summary_row(self, parent_layout, summary: dict, total: int):
         if not summary:

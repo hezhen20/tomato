@@ -40,8 +40,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Tomato Timer")
-        self.setMinimumSize(460, 620)
-        self.resize(460, 620)
+        self.setMinimumSize(500, 620)
+        self.resize(500, 620)
 
         self._icon = _make_icon()
         self.setWindowIcon(self._icon)

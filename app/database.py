@@ -4,7 +4,7 @@ import hashlib
 import os
 import sys
 from contextlib import contextmanager
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from pathlib import Path
 
 
@@ -24,6 +24,17 @@ DB_PATH = _get_data_dir() / "tomato.db"
 DEFAULT_MODES = [
     ("工作", "#00F5A0"),
 ]
+
+PERIOD_KEYS = ("morning", "afternoon", "evening")
+PERIOD_LABELS = {
+    "morning": "上午",
+    "afternoon": "下午",
+    "evening": "晚上",
+}
+
+MORNING_START = time(4, 0)
+AFTERNOON_START = time(12, 0)
+EVENING_START = time(18, 0)
 
 
 @contextmanager
@@ -221,6 +232,113 @@ def get_range_summary(start_date: date, end_date: date) -> dict:
             "color": r["mode_color"],
         }
     return result
+
+
+def _period_for_datetime(dt: datetime):
+    """返回时间点所属的统计日、时段 key、当前时段结束时间。"""
+    current_day = dt.date()
+    current_time = dt.time()
+
+    if MORNING_START <= current_time < AFTERNOON_START:
+        return current_day, "morning", datetime.combine(current_day, AFTERNOON_START)
+    if AFTERNOON_START <= current_time < EVENING_START:
+        return current_day, "afternoon", datetime.combine(current_day, EVENING_START)
+    if current_time >= EVENING_START:
+        return current_day, "evening", datetime.combine(current_day + timedelta(days=1), MORNING_START)
+    return current_day - timedelta(days=1), "evening", datetime.combine(current_day, MORNING_START)
+
+
+def _split_record_periods(start_dt: datetime, duration_seconds: int) -> list:
+    """把单条计时记录按上午/下午/晚上切分。"""
+    if not duration_seconds or duration_seconds <= 0:
+        return []
+
+    end_dt = start_dt + timedelta(seconds=duration_seconds)
+    cursor = start_dt
+    pieces = []
+
+    while cursor < end_dt:
+        stat_day, period_key, period_end = _period_for_datetime(cursor)
+        next_cursor = min(period_end, end_dt)
+        seconds = (next_cursor - cursor).total_seconds()
+        if seconds > 0:
+            pieces.append((stat_day.isoformat(), period_key, seconds))
+        if next_cursor <= cursor:
+            break
+        cursor = next_cursor
+
+    return pieces
+
+
+def _normalize_period_seconds(periods: dict) -> dict:
+    """转成整数秒，并保证三个时段之和等于原始总秒数。"""
+    exact = {key: float(periods.get(key, 0) or 0) for key in PERIOD_KEYS}
+    normalized = {key: int(exact[key]) for key in PERIOD_KEYS}
+    target_total = int(round(sum(exact.values())))
+    remainder = target_total - sum(normalized.values())
+
+    if remainder > 0:
+        order = sorted(
+            PERIOD_KEYS,
+            key=lambda key: exact[key] - normalized[key],
+            reverse=True,
+        )
+        for i in range(remainder):
+            normalized[order[i % len(order)]] += 1
+
+    return normalized
+
+
+def get_range_period_summary(start_date: date, end_date: date) -> dict:
+    """返回日期范围内每天各模式的上午/下午/晚上时长。"""
+    if end_date < start_date:
+        return {}
+
+    window_start = datetime.combine(start_date, MORNING_START)
+    window_end = datetime.combine(end_date + timedelta(days=1), MORNING_START)
+    result = {}
+
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT tr.*, m.name as mode_name, m.color as mode_color
+               FROM time_record tr JOIN mode m ON tr.mode_id = m.id
+               WHERE COALESCE(tr.duration_seconds, 0) > 0
+                 AND julianday(tr.start_time) < julianday(?)
+                 AND julianday(tr.start_time) + (COALESCE(tr.duration_seconds, 0) / 86400.0) > julianday(?)
+               ORDER BY tr.start_time""",
+            (window_end.isoformat(), window_start.isoformat()),
+        ).fetchall()
+
+    for r in rows:
+        start_dt = datetime.fromisoformat(r["start_time"])
+        duration_seconds = int(r["duration_seconds"] or 0)
+        for day, period_key, seconds in _split_record_periods(start_dt, duration_seconds):
+            if day < start_date.isoformat() or day > end_date.isoformat():
+                continue
+            if day not in result:
+                result[day] = {}
+            name = r["mode_name"]
+            if name not in result[day]:
+                result[day][name] = {
+                    "seconds": 0.0,
+                    "color": r["mode_color"],
+                    "periods": {key: 0.0 for key in PERIOD_KEYS},
+                }
+            result[day][name]["periods"][period_key] += seconds
+            result[day][name]["seconds"] += seconds
+
+    normalized_result = {}
+    for day, modes in result.items():
+        normalized_result[day] = {}
+        for name, info in modes.items():
+            periods = _normalize_period_seconds(info["periods"])
+            normalized_result[day][name] = {
+                "seconds": sum(periods.values()),
+                "color": info["color"],
+                "periods": periods,
+            }
+
+    return normalized_result
 
 
 # ---- 设置 ----

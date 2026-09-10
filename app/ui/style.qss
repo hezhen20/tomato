@@ -288,6 +288,45 @@ QWidget[class="summaryRow"] {
     border-radius: 10px;
 }
 
+QFrame#periodCard {
+    background-color: #0D1220;
+    border: 1px solid #1E2A3F;
+    border-radius: 14px;
+}
+
+QFrame#periodCard:hover {
+    border-color: #00E5FF;
+    background-color: #0F1828;
+}
+
+QLabel[class="periodTitle"] {
+    color: #F8FAFC;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+QLabel[class="periodRange"] {
+    color: #A8B3C7;
+    font-size: 12px;
+}
+
+QLabel#periodTotalLabel {
+    color: #00F5A0;
+    font-size: 26px;
+    font-weight: 800;
+    padding: 2px 0 6px 0;
+}
+
+QWidget[class="periodModeRow"] {
+    background-color: #0A0F1C;
+    border-radius: 8px;
+}
+
+QLabel[class="periodModeName"] {
+    color: #F8FAFC;
+    font-size: 13px;
+}
+
 QWidget#navBar {
     background-color: #0D1220;
     border-bottom: 1px solid #1E2A3F;
@@ -364,6 +403,15 @@ QTableWidget::item {
 QTableWidget::item:selected {
     background-color: #102A33;
     color: #F8FAFC;
+}
+
+QToolTip {
+    background-color: #0D1220;
+    color: #F8FAFC;
+    border: 1px solid #00E5FF;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
 }
 
 QHeaderView::section {

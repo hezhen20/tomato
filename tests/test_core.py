@@ -11,6 +11,7 @@ from pathlib import Path
 import tempfile
 _test_db = tempfile.mktemp(suffix=".db")
 os.environ["TOMATO_TEST_DB"] = _test_db
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # patch 数据库路径后再导入
 import app.database as db
@@ -20,9 +21,11 @@ from app.database import (
     init_db, create_user, verify_user, user_exists,
     get_modes, add_mode, delete_mode,
     start_record, stop_record,
-    get_daily_summary, get_records_for_date, get_range_summary,
+    get_daily_summary, get_records_for_date, get_range_summary, get_range_period_summary,
     get_setting, set_setting,
 )
+from PySide6.QtWidgets import QApplication
+from app.ui.history_page import HistoryPage, format_period_detail
 from app.hotkeys import HotkeyManager, mode_action_name
 
 
@@ -196,6 +199,159 @@ class TestCrossDayLogic(unittest.TestCase):
         result = get_range_summary(start, today)
         # 应该是一个字典，key 是日期字符串
         self.assertIsInstance(result, dict)
+
+
+class TestRangePeriodSummary(unittest.TestCase):
+    """周/月分时段统计口径测试"""
+
+    def setUp(self):
+        self.mode = get_modes()[0]
+
+    def _insert_record(self, start: datetime, duration_seconds: int):
+        with db._conn() as conn:
+            conn.execute(
+                "INSERT INTO time_record (mode_id, start_time, end_time, duration_seconds) VALUES (?, ?, ?, ?)",
+                (
+                    self.mode["id"],
+                    start.isoformat(),
+                    (start + timedelta(seconds=duration_seconds)).isoformat(),
+                    duration_seconds,
+                ),
+            )
+
+    def _mode_info(self, result: dict, d: date):
+        return result[d.isoformat()][self.mode["name"]]
+
+    def test_midday_record_splits_between_morning_and_afternoon(self):
+        d = date(2030, 1, 1)
+        self._insert_record(datetime(2030, 1, 1, 11, 30), 3600)
+
+        result = get_range_period_summary(d, d)
+        info = self._mode_info(result, d)
+
+        self.assertEqual(info["periods"]["morning"], 1800)
+        self.assertEqual(info["periods"]["afternoon"], 1800)
+        self.assertEqual(info["periods"]["evening"], 0)
+        self.assertEqual(info["seconds"], 3600)
+
+    def test_after_midnight_before_four_belongs_to_previous_evening(self):
+        d = date(2030, 1, 2)
+        next_day = d + timedelta(days=1)
+        self._insert_record(datetime(2030, 1, 2, 23, 0), 3 * 3600)
+
+        result = get_range_period_summary(d, d)
+        info = self._mode_info(result, d)
+        next_result = get_range_period_summary(next_day, next_day)
+
+        self.assertEqual(info["periods"]["morning"], 0)
+        self.assertEqual(info["periods"]["afternoon"], 0)
+        self.assertEqual(info["periods"]["evening"], 3 * 3600)
+        self.assertEqual(info["seconds"], 3 * 3600)
+        self.assertNotIn(next_day.isoformat(), next_result)
+
+    def test_autosaved_midnight_records_still_belong_to_previous_evening(self):
+        d = date(2030, 1, 4)
+        next_day = d + timedelta(days=1)
+        self._insert_record(datetime(2030, 1, 4, 23, 0), 3600)
+        self._insert_record(datetime(2030, 1, 5, 0, 0), 2 * 3600)
+
+        result = get_range_period_summary(d, d)
+        info = self._mode_info(result, d)
+        next_result = get_range_period_summary(next_day, next_day)
+
+        self.assertEqual(info["periods"]["evening"], 3 * 3600)
+        self.assertEqual(info["seconds"], 3 * 3600)
+        self.assertNotIn(next_day.isoformat(), next_result)
+
+    def test_week_boundary_night_is_not_counted_twice(self):
+        first_day = date(2030, 2, 1)
+        sunday = first_day + timedelta(days=(6 - first_day.weekday()) % 7)
+        monday = sunday - timedelta(days=6)
+        next_monday = sunday + timedelta(days=1)
+        next_sunday = next_monday + timedelta(days=6)
+        self._insert_record(datetime(sunday.year, sunday.month, sunday.day, 23, 0), 3 * 3600)
+
+        this_week = get_range_period_summary(monday, sunday)
+        next_week = get_range_period_summary(next_monday, next_sunday)
+        info = self._mode_info(this_week, sunday)
+
+        self.assertEqual(info["periods"]["evening"], 3 * 3600)
+        self.assertNotIn(sunday.isoformat(), next_week)
+        self.assertNotIn(next_monday.isoformat(), next_week)
+
+    def test_month_boundary_night_is_not_counted_twice(self):
+        month_end = date(2030, 3, 31)
+        next_month_start = date(2030, 4, 1)
+        next_month_end = date(2030, 4, 30)
+        self._insert_record(datetime(2030, 3, 31, 23, 0), 3 * 3600)
+
+        this_month = get_range_period_summary(date(2030, 3, 1), month_end)
+        next_month = get_range_period_summary(next_month_start, next_month_end)
+        info = self._mode_info(this_month, month_end)
+
+        self.assertEqual(info["periods"]["evening"], 3 * 3600)
+        self.assertNotIn(month_end.isoformat(), next_month)
+        self.assertNotIn(next_month_start.isoformat(), next_month)
+
+
+class TestHistoryPeriodDetailFormatting(unittest.TestCase):
+    """历史页时段明细展示格式测试"""
+
+    def test_period_detail_uses_line_breaks(self):
+        text = format_period_detail({
+            "morning": 1800,
+            "afternoon": 0,
+            "evening": 7200,
+        })
+
+        self.assertEqual(text, "上午 30m\n下午 0m\n晚上 2h 0m")
+
+
+class TestHistoryPageUi(unittest.TestCase):
+    """历史页 UI 结构烟测"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _insert_record(self, start: datetime, duration_seconds: int):
+        mode = get_modes()[0]
+        with db._conn() as conn:
+            conn.execute(
+                "INSERT INTO time_record (mode_id, start_time, end_time, duration_seconds) VALUES (?, ?, ?, ?)",
+                (
+                    mode["id"],
+                    start.isoformat(),
+                    (start + timedelta(seconds=duration_seconds)).isoformat(),
+                    duration_seconds,
+                ),
+            )
+
+    def test_day_tab_uses_cards_instead_of_detail_table(self):
+        page = HistoryPage()
+        try:
+            self.assertFalse(hasattr(page, "day_table"))
+            page._current_date = date(2031, 1, 1)
+            page._refresh_day()
+            self.assertEqual(page.day_period_layout.count(), 3)
+        finally:
+            page.deleteLater()
+
+    def test_week_detail_cell_is_compact_with_tooltip(self):
+        self._insert_record(datetime(2031, 1, 2, 11, 30), 3600)
+        page = HistoryPage()
+        try:
+            page._current_date = date(2031, 1, 2)
+            page._refresh_week()
+            self.assertEqual(page.week_table.columnCount(), 4)
+            self.assertFalse(page.week_table.wordWrap())
+            self.assertGreaterEqual(page.week_table.rowCount(), 1)
+            item = page.week_table.item(0, 2)
+            self.assertEqual(item.text(), "查看")
+            self.assertIn("上午", item.toolTip())
+            self.assertIn("\n", item.toolTip())
+        finally:
+            page.deleteLater()
 
 
 class TestAccumulationLogic(unittest.TestCase):
