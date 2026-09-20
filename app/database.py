@@ -36,6 +36,16 @@ MORNING_START = time(4, 0)
 AFTERNOON_START = time(12, 0)
 EVENING_START = time(18, 0)
 
+# ---- 休息提醒设置 ----
+BREAK_REMINDER_ENABLED_KEY = "break_reminder_enabled"
+BREAK_REMINDER_INTERVAL_KEY = "break_reminder_interval_minutes"
+BREAK_REMINDER_GRACE_KEY = "break_reminder_pause_grace_minutes"
+BREAK_REMINDER_MESSAGE_KEY = "break_reminder_message"
+BREAK_REMINDER_ENABLED_DEFAULT = "1"
+BREAK_REMINDER_INTERVAL_DEFAULT = 45
+BREAK_REMINDER_GRACE_DEFAULT = 5
+BREAK_REMINDER_MESSAGE_DEFAULT = "45分钟到了，该休息了，喝点水活动一下吧，身体第一哦！"
+
 
 @contextmanager
 def _conn():
@@ -353,3 +363,32 @@ def set_setting(key: str, value: str):
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value)
         )
+
+
+def _setting_int(key: str, default: int, minimum: int, maximum: int) -> int:
+    """读取并约束整数设置，避免旧配置或手工修改导致异常。"""
+    try:
+        value = int(get_setting(key, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(maximum, value))
+
+
+def break_reminder_enabled() -> bool:
+    return get_setting(
+        BREAK_REMINDER_ENABLED_KEY,
+        BREAK_REMINDER_ENABLED_DEFAULT,
+    ).strip() != "0"
+
+
+def break_reminder_interval_minutes() -> int:
+    return _setting_int(BREAK_REMINDER_INTERVAL_KEY, BREAK_REMINDER_INTERVAL_DEFAULT, 5, 240)
+
+
+def break_reminder_grace_minutes() -> int:
+    return _setting_int(BREAK_REMINDER_GRACE_KEY, BREAK_REMINDER_GRACE_DEFAULT, 0, 60)
+
+
+def break_reminder_message() -> str:
+    value = get_setting(BREAK_REMINDER_MESSAGE_KEY, BREAK_REMINDER_MESSAGE_DEFAULT).strip()
+    return value or BREAK_REMINDER_MESSAGE_DEFAULT

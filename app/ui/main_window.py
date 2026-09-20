@@ -12,6 +12,7 @@ from app.ui.main_page import MainPage
 from app.ui.history_page import HistoryPage
 from app.ui.settings_page import SettingsPage, floating_time_mask_enabled
 from app.ui.floating_ball import FloatingBall
+from app.ui.break_reminder import BreakReminderToast
 from app.hotkeys import HotkeyManager
 
 
@@ -48,6 +49,8 @@ class MainWindow(QMainWindow):
 
         self._hotkey_manager = HotkeyManager()
         self._username = ""
+        self._break_reminder_toast = BreakReminderToast()
+        self._break_reminder_toast.closed.connect(self._on_break_reminder_closed)
 
         self._setup_ui()
         self._setup_tray()
@@ -144,6 +147,7 @@ class MainWindow(QMainWindow):
 
         # 创建主要页面
         self._main_page = MainPage()
+        self._main_page.break_reminder_requested.connect(self._on_break_reminder_requested)
         self._stack.addWidget(self._main_page)
 
         self._history_page = HistoryPage()
@@ -153,6 +157,7 @@ class MainWindow(QMainWindow):
         self._settings_page.modes_changed.connect(self._on_modes_changed)
         self._settings_page.hotkeys_changed.connect(self._on_hotkeys_changed)
         self._settings_page.floating_settings_changed.connect(self._on_floating_settings_changed)
+        self._settings_page.reminder_settings_changed.connect(self._on_reminder_settings_changed)
         self._stack.addWidget(self._settings_page)
 
         # 连接快捷键
@@ -189,6 +194,21 @@ class MainWindow(QMainWindow):
     def _on_hotkeys_changed(self):
         self._hotkey_manager.restart()
 
+    @Slot(str, int, str)
+    def _on_break_reminder_requested(self, mode_name: str, interval_minutes: int, message: str):
+        self._break_reminder_toast.show_reminder(mode_name, interval_minutes, message)
+
+    @Slot()
+    def _on_break_reminder_closed(self):
+        if hasattr(self, "_main_page"):
+            self._main_page.dismiss_break_reminder()
+
+    @Slot()
+    def _on_reminder_settings_changed(self):
+        self._break_reminder_toast.close()
+        if hasattr(self, "_main_page"):
+            self._main_page.reload_reminder_settings()
+
     @Slot(bool)
     def _on_floating_settings_changed(self, time_mask_enabled: bool):
         self._floating_ball.set_time_mask_enabled(time_mask_enabled)
@@ -215,6 +235,7 @@ class MainWindow(QMainWindow):
             self._main_page.stop_timer()
         self._hotkey_manager.stop()
         self._float_sync_timer.stop()
+        self._break_reminder_toast.close()
         self._floating_ball.close()
         self._tray.hide()
         from PySide6.QtWidgets import QApplication

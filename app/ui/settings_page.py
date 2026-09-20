@@ -14,11 +14,30 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QSpinBox,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from app.database import add_mode, change_password, delete_mode, get_modes, get_setting, set_setting, verify_user
+from app.database import (
+    BREAK_REMINDER_ENABLED_KEY,
+    BREAK_REMINDER_GRACE_KEY,
+    BREAK_REMINDER_INTERVAL_KEY,
+    BREAK_REMINDER_MESSAGE_DEFAULT,
+    BREAK_REMINDER_MESSAGE_KEY,
+    add_mode,
+    break_reminder_enabled,
+    break_reminder_grace_minutes,
+    break_reminder_interval_minutes,
+    break_reminder_message,
+    change_password,
+    delete_mode,
+    get_modes,
+    get_setting,
+    set_setting,
+    verify_user,
+)
 from app.hotkeys import MODE_ACTION_PREFIX, mode_action_name
 from app.ui.colors import color_swatch_style
 
@@ -174,6 +193,7 @@ class SettingsPage(QWidget):
     modes_changed = Signal()
     hotkeys_changed = Signal()
     floating_settings_changed = Signal(bool)
+    reminder_settings_changed = Signal()
 
     def __init__(self, hotkey_manager, username: str):
         super().__init__()
@@ -193,6 +213,7 @@ class SettingsPage(QWidget):
         tabs = QTabWidget()
         tabs.addTab(self._build_modes_tab(), "模式管理")
         tabs.addTab(self._build_hotkeys_tab(), "快捷键")
+        tabs.addTab(self._build_reminder_tab(), "休息提醒")
         tabs.addTab(self._build_floating_tab(), "悬浮窗")
         tabs.addTab(self._build_password_tab(), "修改密码")
         layout.addWidget(tabs)
@@ -501,6 +522,128 @@ class SettingsPage(QWidget):
         layout.addWidget(mask_card)
         layout.addStretch()
         return widget
+
+    def _build_reminder_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(14)
+
+        intro = QLabel(
+            "把提醒当作轻轻敲肩，而不是强制中断。计时只计算有效工作时间，"
+            "暂停本身不会把提醒倒计时往前推进。"
+        )
+        intro.setProperty("class", "mutedLabel")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        title = QLabel("工作节奏提醒")
+        title.setProperty("class", "sectionTitle")
+        header.addWidget(title)
+        header.addStretch()
+
+        self.reminder_enabled_toggle = QPushButton()
+        self.reminder_enabled_toggle.setObjectName("toggleButton")
+        self.reminder_enabled_toggle.setCheckable(True)
+        self.reminder_enabled_toggle.setFixedWidth(92)
+        self.reminder_enabled_toggle.setChecked(break_reminder_enabled())
+        self._set_reminder_toggle_text(self.reminder_enabled_toggle.isChecked())
+        self.reminder_enabled_toggle.toggled.connect(self._set_reminder_toggle_text)
+        header.addWidget(self.reminder_enabled_toggle)
+        card_layout.addLayout(header)
+
+        desc = QLabel("到达设定时长后，在屏幕正中央弹出一张提醒卡。")
+        desc.setProperty("class", "mutedLabel")
+        desc.setWordWrap(True)
+        card_layout.addWidget(desc)
+
+        interval_row = QHBoxLayout()
+        interval_label = QLabel("提醒间隔")
+        interval_label.setMinimumWidth(130)
+        interval_row.addWidget(interval_label)
+        self.reminder_interval_spin = QSpinBox()
+        self.reminder_interval_spin.setRange(5, 240)
+        self.reminder_interval_spin.setSuffix(" 分钟")
+        self.reminder_interval_spin.setValue(break_reminder_interval_minutes())
+        self.reminder_interval_spin.setFixedWidth(150)
+        interval_row.addWidget(self.reminder_interval_spin)
+        interval_row.addStretch()
+        card_layout.addLayout(interval_row)
+
+        grace_row = QHBoxLayout()
+        grace_label = QLabel("暂停宽限期")
+        grace_label.setMinimumWidth(130)
+        grace_row.addWidget(grace_label)
+        self.reminder_grace_spin = QSpinBox()
+        self.reminder_grace_spin.setRange(0, 60)
+        self.reminder_grace_spin.setSuffix(" 分钟")
+        self.reminder_grace_spin.setValue(break_reminder_grace_minutes())
+        self.reminder_grace_spin.setFixedWidth(150)
+        grace_row.addWidget(self.reminder_grace_spin)
+        grace_row.addStretch()
+        card_layout.addLayout(grace_row)
+
+        grace_hint = QLabel("暂停不超过这个时长，继续后仍算同一轮工作；超过则下一次提醒从头计算。")
+        grace_hint.setProperty("class", "mutedLabel")
+        grace_hint.setWordWrap(True)
+        card_layout.addWidget(grace_hint)
+
+        message_label = QLabel("休息文案")
+        message_label.setProperty("class", "sectionTitle")
+        card_layout.addWidget(message_label)
+
+        self.reminder_message_edit = QTextEdit()
+        self.reminder_message_edit.setPlainText(break_reminder_message())
+        self.reminder_message_edit.setPlaceholderText(BREAK_REMINDER_MESSAGE_DEFAULT)
+        self.reminder_message_edit.setFixedHeight(76)
+        card_layout.addWidget(self.reminder_message_edit)
+
+        message_hint = QLabel("支持自定义文字，提醒关闭前会一直保留在屏幕中央。")
+        message_hint.setProperty("class", "mutedLabel")
+        message_hint.setWordWrap(True)
+        card_layout.addWidget(message_hint)
+
+        self.reminder_save_status = QLabel("")
+        self.reminder_save_status.setObjectName("settingsSaveStatus")
+        self.reminder_save_status.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(self.reminder_save_status)
+
+        save_btn = QPushButton("保存提醒设置")
+        save_btn.setObjectName("primaryButton")
+        save_btn.clicked.connect(self._save_reminder_settings)
+        card_layout.addWidget(save_btn, alignment=Qt.AlignRight)
+
+        layout.addWidget(card)
+        layout.addStretch()
+        return widget
+
+    def _set_reminder_toggle_text(self, enabled: bool):
+        self.reminder_enabled_toggle.setText("已开启" if enabled else "已关闭")
+
+    def _save_reminder_settings(self):
+        enabled = self.reminder_enabled_toggle.isChecked()
+        message = self.reminder_message_edit.toPlainText().strip()
+        if not message:
+            self.reminder_save_status.setStyleSheet("color: #FF5C8A;")
+            self.reminder_save_status.setText("休息文案不能为空")
+            return
+        if len(message) > 200:
+            self.reminder_save_status.setStyleSheet("color: #FF5C8A;")
+            self.reminder_save_status.setText("休息文案不能超过 200 个字符")
+            return
+        set_setting(BREAK_REMINDER_ENABLED_KEY, "1" if enabled else "0")
+        set_setting(BREAK_REMINDER_INTERVAL_KEY, str(self.reminder_interval_spin.value()))
+        set_setting(BREAK_REMINDER_GRACE_KEY, str(self.reminder_grace_spin.value()))
+        set_setting(BREAK_REMINDER_MESSAGE_KEY, message)
+        self.reminder_save_status.setStyleSheet("color: #00F5A0;")
+        self.reminder_save_status.setText("已保存，下一轮计时立即生效")
+        self.reminder_settings_changed.emit()
 
     def _set_floating_time_mask_toggle_text(self, enabled: bool):
         self.floating_time_mask_toggle.setText("已开启" if enabled else "已关闭")

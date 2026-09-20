@@ -237,6 +237,43 @@ QLineEdit:disabled {
     color: #566174;
 }
 
+QTextEdit {
+    background-color: #0A0F1C;
+    color: #F8FAFC;
+    border: 1px solid #243047;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 14px;
+    selection-background-color: #00F5A0;
+    selection-color: #061017;
+}
+
+QTextEdit:focus {
+    background-color: #111827;
+    border-color: #00E5FF;
+}
+
+QSpinBox {
+    background-color: #0A0F1C;
+    color: #F8FAFC;
+    border: 1px solid #243047;
+    border-radius: 10px;
+    padding: 7px 10px;
+    min-height: 22px;
+}
+
+QSpinBox:focus {
+    background-color: #111827;
+    border-color: #00E5FF;
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
 QLabel#titleLabel {
     font-size: 30px;
     font-weight: 800;
@@ -256,6 +293,12 @@ QLabel#msgLabel {
     min-height: 20px;
 }
 
+QLabel#settingsSaveStatus {
+    color: #A8B3C7;
+    font-size: 12px;
+    min-height: 18px;
+}
+
 QLabel#timerLabel {
     font-size: 58px;
     font-weight: 800;
@@ -273,6 +316,11 @@ QLabel#modeLabel {
 QLabel#statusLabel {
     font-size: 13px;
     color: #A8B3C7;
+}
+
+QLabel#reminderHintLabel {
+    color: #7C8AA3;
+    font-size: 12px;
 }
 
 QPushButton.modeBtn {
@@ -524,4 +572,91 @@ QMessageBox QLabel {
 
 QMessageBox QPushButton {
     min-width: 84px;
+}
+
+QFrame#breakReminderCard {
+    background-color: rgba(18, 21, 30, 236);
+    border: 1px solid rgba(255, 255, 255, 26);
+    border-radius: 16px;
+}
+
+QWidget#breakReminderWindow {
+    background-color: transparent;
+}
+
+QLabel#reminderStatusDot {
+    color: #E85D75;
+    font-size: 10px;
+}
+
+QLabel#reminderModeChip {
+    background-color: rgba(0, 245, 160, 18);
+    color: #A7FFE2;
+    border: 1px solid rgba(0, 245, 160, 80);
+    border-radius: 10px;
+    padding: 3px 9px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QLabel#reminderEyebrow {
+    color: #F8FAFC;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QFrame#reminderTimeBlock {
+    background-color: rgba(232, 93, 117, 30);
+    border: 1px solid rgba(232, 93, 117, 82);
+    border-radius: 18px;
+}
+
+QLabel#reminderTitle {
+    color: #FFFFFF;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+QLabel#reminderMessage {
+    color: #E7EAF0;
+    font-size: 14px;
+}
+
+QLabel#reminderMeta {
+    color: #98A2B3;
+    font-size: 12px;
+}
+
+QLabel#reminderMinutes {
+    color: #FFEAF0;
+    font-size: 36px;
+    font-weight: 800;
+    font-family: "Cascadia Mono", "SF Mono", "Consolas", monospace;
+}
+
+QLabel#reminderUnit {
+    color: #F3A0B0;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QPushButton#reminderAcknowledgeButton {
+    background-color: #F16E86;
+    color: #250D14;
+    border: none;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QPushButton#reminderAcknowledgeButton:hover {
+    background-color: #FF8EA1;
+}
+
+QPushButton#reminderAcknowledgeButton:pressed {
+    background-color: #D8576E;
+}
+
+QFrame#reminderRule {
+    background-color: rgba(255, 255, 255, 28);
 }

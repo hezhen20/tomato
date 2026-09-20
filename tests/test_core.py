@@ -3,6 +3,9 @@ import unittest
 import os
 import sqlite3
 import tempfile
+import subprocess
+import sys
+import textwrap
 from datetime import date, datetime, timedelta
 from unittest.mock import patch, MagicMock
 from pathlib import Path
@@ -23,9 +26,16 @@ from app.database import (
     start_record, stop_record,
     get_daily_summary, get_records_for_date, get_range_summary, get_range_period_summary,
     get_setting, set_setting,
+    BREAK_REMINDER_MESSAGE_DEFAULT, BREAK_REMINDER_MESSAGE_KEY,
+    break_reminder_message,
 )
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
 from app.ui.history_page import HistoryPage, format_period_detail
+from app.ui.break_reminder import BreakReminderToast
+from app.ui.main_page import MainPage
+from app.ui.settings_page import SettingsPage
 from app.hotkeys import HotkeyManager, mode_action_name
 
 
@@ -451,6 +461,106 @@ class TestSettingsStorage(unittest.TestCase):
 
         set_setting(key, "0")
         self.assertEqual(get_setting(key, "1"), "0")
+
+
+class TestBreakReminderFeature(unittest.TestCase):
+    """休息提醒的设置、信号、静态显示和绘制回归测试"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def tearDown(self):
+        set_setting(BREAK_REMINDER_MESSAGE_KEY, BREAK_REMINDER_MESSAGE_DEFAULT)
+
+    def test_custom_message_persists(self):
+        custom = "起来走两步，喝口水再回来。"
+        set_setting(BREAK_REMINDER_MESSAGE_KEY, custom)
+        self.assertEqual(break_reminder_message(), custom)
+
+    def test_main_page_emits_custom_message(self):
+        custom = "自定义休息文案"
+        set_setting(BREAK_REMINDER_MESSAGE_KEY, custom)
+        page = MainPage()
+        try:
+            page._reminder_enabled = True
+            page._reminder_interval_minutes = 1
+            page._reminder_message = break_reminder_message()
+            page._running = True
+            page._current_mode = get_modes()[0]
+            events = []
+            page.break_reminder_requested.connect(lambda *args: events.append(args))
+
+            for _ in range(60):
+                page._tick()
+
+            self.assertEqual(events, [(page._current_mode["name"], 1, custom)])
+        finally:
+            page.deleteLater()
+
+    def test_settings_editor_saves_custom_message(self):
+        custom = "自定义设置页文案"
+        settings = SettingsPage(HotkeyManager(), "test")
+        try:
+            settings.reminder_message_edit.setPlainText(custom)
+            settings._save_reminder_settings()
+            self.assertEqual(break_reminder_message(), custom)
+        finally:
+            settings.deleteLater()
+
+    def test_toast_is_static_and_requires_manual_close(self):
+        toast = BreakReminderToast()
+        closed = []
+        toast.closed.connect(lambda: closed.append(True))
+        try:
+            toast.show_reminder("工作", 45, "请喝水并活动一下。")
+            geometry = toast.geometry()
+            QTest.qWait(120)
+            self.assertTrue(toast.isVisible())
+            self.assertTrue(toast.testAttribute(Qt.WA_TranslucentBackground))
+            self.assertEqual(toast.geometry(), geometry)
+            self.assertEqual(toast._message.text(), "请喝水并活动一下。")
+            self.assertEqual(toast._mode_chip.text(), "工作")
+
+            QTest.qWait(700)
+            self.assertTrue(toast.isVisible(), "提醒必须等待用户手动关闭")
+            self.assertFalse(hasattr(toast, "_animation"))
+            self.assertFalse(hasattr(toast, "_pulse"))
+            self.assertEqual(toast.geometry(), geometry)
+            toast._request_close()
+            self.assertFalse(toast.isVisible())
+            self.assertEqual(closed, [True])
+        finally:
+            toast.close()
+
+    def test_static_smoke_has_no_qt_paint_errors(self):
+        script = textwrap.dedent(
+            """
+            from pathlib import Path
+            from PySide6.QtCore import QTimer
+            from PySide6.QtWidgets import QApplication
+            from app.ui.break_reminder import BreakReminderToast
+
+            app = QApplication([])
+            app.setStyleSheet(Path('app/ui/style.qss').read_text(encoding='utf-8'))
+            toast = BreakReminderToast()
+            toast.show_reminder('工作', 45, '测试提醒')
+            QTimer.singleShot(900, toast._request_close)
+            QTimer.singleShot(1400, app.quit)
+            app.exec()
+            """
+        )
+        env = dict(os.environ)
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotRegex(result.stderr, r"QPainter|UpdateLayeredWindowIndirect")
 
 
 if __name__ == "__main__":

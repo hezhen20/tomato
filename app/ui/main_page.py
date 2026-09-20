@@ -4,8 +4,18 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt, QTimer, Slot
 from datetime import date
+import time
 
-from app.database import get_modes, start_record, stop_record, get_daily_summary
+from app.database import (
+    break_reminder_enabled,
+    break_reminder_grace_minutes,
+    break_reminder_interval_minutes,
+    break_reminder_message,
+    get_daily_summary,
+    get_modes,
+    start_record,
+    stop_record,
+)
 from app.ui.colors import foreground_for, mix_color, readable_color
 
 def format_time(seconds: int) -> str:
@@ -24,6 +34,8 @@ def format_duration(seconds: int) -> str:
 
 
 class MainPage(QWidget):
+    break_reminder_requested = Signal(str, int, str)
+
     def __init__(self):
         super().__init__()
         self._timer = QTimer(self)
@@ -39,8 +51,16 @@ class MainPage(QWidget):
         self._current_record_id = None
         self._current_date = date.today()  # 当前计时所属日期
         self._mode_buttons = []
+        self._continuous_active_seconds = 0
+        self._pause_started_at = None
+        self._reminder_pending = False
+        self._reminder_enabled = True
+        self._reminder_interval_minutes = 45
+        self._reminder_grace_minutes = 5
+        self._reminder_message = ""
 
         self._setup_ui()
+        self._load_reminder_settings()
         self.refresh_modes()
         self.refresh_today_summary()
 
@@ -77,6 +97,11 @@ class MainPage(QWidget):
         self.status_label.setObjectName("statusLabel")
         self.status_label.setAlignment(Qt.AlignCenter)
         timer_layout.addWidget(self.status_label)
+
+        self.reminder_hint_label = QLabel("")
+        self.reminder_hint_label.setObjectName("reminderHintLabel")
+        self.reminder_hint_label.setAlignment(Qt.AlignCenter)
+        timer_layout.addWidget(self.reminder_hint_label)
 
         # 模式按钮区域
         self.modes_layout = QHBoxLayout()
@@ -123,6 +148,28 @@ class MainPage(QWidget):
         layout.addWidget(summary_card)
 
         layout.addStretch()
+
+    def _load_reminder_settings(self):
+        self._reminder_enabled = break_reminder_enabled()
+        self._reminder_interval_minutes = break_reminder_interval_minutes()
+        self._reminder_grace_minutes = break_reminder_grace_minutes()
+        self._reminder_message = break_reminder_message()
+        self._update_reminder_hint()
+
+    def reload_reminder_settings(self):
+        """设置页保存后刷新本页配置，正在计时也会立即使用新值。"""
+        self._load_reminder_settings()
+        if not self._reminder_enabled:
+            self._reminder_pending = False
+
+    def _update_reminder_hint(self):
+        if self._reminder_enabled:
+            self.reminder_hint_label.setText(
+                f"每 {self._reminder_interval_minutes} 分钟提醒休息 · "
+                f"暂停超过 {self._reminder_grace_minutes} 分钟，下一次提醒从头计算"
+            )
+        else:
+            self.reminder_hint_label.setText("休息提醒已关闭，可在设置中重新开启")
 
     def refresh_modes(self):
         # 清除旧按钮
@@ -194,6 +241,9 @@ class MainPage(QWidget):
         self._paused = False
         self._running = True
         self._current_record_id = start_record(mode["id"])
+        self._continuous_active_seconds = 0
+        self._pause_started_at = None
+        self._reminder_pending = False
 
         self.mode_label.setText(f"● {mode['name']}")
         self.mode_label.setStyleSheet(f"color: {readable_color(mode['color'])};")
@@ -229,6 +279,14 @@ class MainPage(QWidget):
                 self._current_record_id = start_record(self._current_mode["id"])
                 self.timer_label.setText(format_time(self._elapsed))
                 self.refresh_today_summary()
+                self._continuous_active_seconds = 0
+
+            pause_duration = 0
+            if self._pause_started_at is not None:
+                pause_duration = max(0, time.monotonic() - self._pause_started_at)
+            if pause_duration >= self._reminder_grace_minutes * 60:
+                self._continuous_active_seconds = 0
+            self._pause_started_at = None
 
             self._paused = False
             self._timer.start()
@@ -237,6 +295,7 @@ class MainPage(QWidget):
         else:
             self._paused = True
             self._timer.stop()
+            self._pause_started_at = time.monotonic()
             self.pause_btn.setText("继续")
             self.status_label.setText("已暂停")
 
@@ -259,12 +318,15 @@ class MainPage(QWidget):
         self._running = False
         self._paused = False
         self._current_record_id = None
+        self._pause_started_at = None
+        self._reminder_pending = False
 
     def _reset_ui(self):
         self.mode_label.setText("选择模式开始计时")
         self.mode_label.setStyleSheet("")
         self.timer_label.setText("00:00:00")
         self.status_label.setText("就绪")
+        self._update_reminder_hint()
         self.pause_btn.setText("暂停")
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
@@ -278,8 +340,21 @@ class MainPage(QWidget):
             return
         self._elapsed += 1
         self._session_elapsed += 1
+        self._continuous_active_seconds += 1
         self._autosave_counter += 1
         self.timer_label.setText(format_time(self._elapsed))
+
+        if (
+            self._reminder_enabled
+            and not self._reminder_pending
+            and self._continuous_active_seconds >= self._reminder_interval_minutes * 60
+        ):
+            self._reminder_pending = True
+            self.break_reminder_requested.emit(
+                self._current_mode["name"],
+                self._reminder_interval_minutes,
+                self._reminder_message,
+            )
 
         # 每30秒自动保存一次当前进度
         if self._autosave_counter >= 30 and self._current_record_id and self._session_elapsed > 0:
@@ -300,8 +375,15 @@ class MainPage(QWidget):
         self._session_elapsed = 0
         self._elapsed = 0  # 新一天从0开始
         self._current_record_id = start_record(self._current_mode["id"])
+        self._continuous_active_seconds = 0
+        self._reminder_pending = False
         self.timer_label.setText(format_time(self._elapsed))
         self.refresh_today_summary()
+
+    def dismiss_break_reminder(self):
+        """关闭提醒浮层，仅重置下一次提醒的计数，不改变计时状态。"""
+        self._reminder_pending = False
+        self._continuous_active_seconds = 0
 
     def refresh_today_summary(self):
         # 清除旧内容
