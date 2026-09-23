@@ -206,6 +206,65 @@ def get_records_for_date(d: date) -> list:
     return [dict(r) for r in rows]
 
 
+def get_records_in_date_range(start_date: date, end_date: date) -> list:
+    """返回日期范围内可清理的已完成记录，按最新开始时间倒序。"""
+    if end_date < start_date:
+        return []
+    return get_records_in_datetime_range(
+        datetime.combine(start_date, time.min),
+        datetime.combine(end_date + timedelta(days=1), time.min),
+    )
+
+
+def delete_records_in_date_range(start_date: date, end_date: date) -> int:
+    """删除日期范围内已完成的记录，返回实际删除条数。"""
+    if end_date < start_date:
+        return 0
+    return delete_records_in_datetime_range(
+        datetime.combine(start_date, time.min),
+        datetime.combine(end_date + timedelta(days=1), time.min),
+    )
+
+
+def get_records_in_datetime_range(start_at: datetime, end_at: datetime) -> list:
+    """返回 [start_at, end_at) 内可清理的已完成记录，按最新开始时间倒序。"""
+    if end_at <= start_at:
+        return []
+
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT tr.id, tr.start_time, tr.end_time, tr.duration_seconds,
+                      COALESCE(m.name, '已删除模式') as mode_name,
+                      COALESCE(m.color, '#A8B3C7') as mode_color
+               FROM time_record tr
+               LEFT JOIN mode m ON tr.mode_id = m.id
+               WHERE tr.start_time >= ?
+                 AND tr.start_time < ?
+                 AND tr.end_time IS NOT NULL
+                 AND COALESCE(tr.duration_seconds, 0) > 0
+               ORDER BY tr.start_time DESC""",
+            (start_at.isoformat(), end_at.isoformat()),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_records_in_datetime_range(start_at: datetime, end_at: datetime) -> int:
+    """删除 [start_at, end_at) 内已完成的记录，返回实际删除条数。"""
+    if end_at <= start_at:
+        return 0
+
+    with _conn() as conn:
+        cursor = conn.execute(
+            """DELETE FROM time_record
+               WHERE start_time >= ?
+                 AND start_time < ?
+                 AND end_time IS NOT NULL
+                 AND COALESCE(duration_seconds, 0) > 0""",
+            (start_at.isoformat(), end_at.isoformat()),
+        )
+        return cursor.rowcount
+
+
 def get_daily_summary(d: date) -> dict:
     """返回某天各模式的总时长 {mode_name: {seconds, color}}"""
     records = get_records_for_date(d)

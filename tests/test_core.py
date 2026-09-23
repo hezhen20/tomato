@@ -24,7 +24,9 @@ from app.database import (
     init_db, create_user, verify_user, user_exists,
     get_modes, add_mode, delete_mode,
     start_record, stop_record,
-    get_daily_summary, get_records_for_date, get_range_summary, get_range_period_summary,
+    get_daily_summary, get_records_for_date, get_records_in_date_range,
+    delete_records_in_date_range, get_range_summary, get_range_period_summary,
+    get_records_in_datetime_range, delete_records_in_datetime_range,
     get_setting, set_setting,
     BREAK_REMINDER_MESSAGE_DEFAULT, BREAK_REMINDER_MESSAGE_KEY,
     break_reminder_message,
@@ -362,6 +364,57 @@ class TestHistoryPageUi(unittest.TestCase):
             self.assertIn("\n", item.toolTip())
         finally:
             page.deleteLater()
+
+
+class TestRecordManagement(unittest.TestCase):
+    """记录管理的范围筛选与删除逻辑"""
+
+    def _insert_record(self, start: datetime, duration_seconds: int, end_time=True):
+        mode = get_modes()[0]
+        with db._conn() as conn:
+            conn.execute(
+                "INSERT INTO time_record (mode_id, start_time, end_time, duration_seconds) VALUES (?, ?, ?, ?)",
+                (
+                    mode["id"],
+                    start.isoformat(),
+                    (start + timedelta(seconds=duration_seconds)).isoformat() if end_time else None,
+                    duration_seconds,
+                ),
+            )
+
+    def test_history_page_includes_record_management_tab(self):
+        page = HistoryPage()
+        try:
+            self.assertEqual(page._tabs.count(), 4)
+            self.assertEqual(page._tabs.tabText(3), "管理")
+            self.assertEqual(page.manage_delete_btn.isEnabled(), bool(page._manage_records))
+        finally:
+            page.deleteLater()
+
+    def test_delete_date_range_skips_active_record(self):
+        day = date(2032, 2, 3)
+        self._insert_record(datetime(2032, 2, 3, 9, 0), 3600)
+        self._insert_record(datetime(2032, 2, 3, 10, 0), 0, end_time=False)
+
+        records = get_records_in_date_range(day, day)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(delete_records_in_date_range(day, day), 1)
+        self.assertEqual(len(get_records_in_date_range(day, day)), 0)
+
+    def test_delete_datetime_range_uses_minute_precision(self):
+        start = datetime(2032, 2, 4, 9, 30)
+        mode = get_modes()[0]
+        with db._conn() as conn:
+            for minute in (29, 30, 31):
+                value = start.replace(minute=minute)
+                conn.execute(
+                    "INSERT INTO time_record (mode_id, start_time, end_time, duration_seconds) VALUES (?, ?, ?, ?)",
+                    (mode["id"], value.isoformat(), (value + timedelta(seconds=30)).isoformat(), 30),
+                )
+
+        end_exclusive = start + timedelta(minutes=1)
+        self.assertEqual(len(get_records_in_datetime_range(start, end_exclusive)), 1)
+        self.assertEqual(delete_records_in_datetime_range(start, end_exclusive), 1)
 
 
 class TestAccumulationLogic(unittest.TestCase):

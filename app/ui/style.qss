@@ -275,6 +275,80 @@ QSpinBox::down-button {
     background: transparent;
 }
 
+QDateTimeEdit {
+    background-color: #0A0F1C;
+    color: #F8FAFC;
+    border: 1px solid #243047;
+    border-radius: 10px;
+    padding: 7px 10px;
+    min-height: 22px;
+    selection-background-color: #00F5A0;
+    selection-color: #061017;
+}
+
+QDateTimeEdit:focus {
+    background-color: #111827;
+    border-color: #00E5FF;
+}
+
+QDateTimeEdit::drop-down {
+    width: 26px;
+    border: none;
+    background-color: #111827;
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
+}
+
+QCalendarWidget {
+    background-color: #0D1220;
+    color: #F8FAFC;
+}
+
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background-color: #111827;
+    border-bottom: 1px solid #243047;
+}
+
+QCalendarWidget QToolButton {
+    background-color: transparent;
+    color: #F8FAFC;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #102636;
+    color: #7DF9FF;
+}
+
+QCalendarWidget QToolButton::menu-indicator {
+    image: none;
+}
+
+QCalendarWidget QSpinBox {
+    background-color: #0A0F1C;
+    color: #F8FAFC;
+    border: 1px solid #243047;
+    border-radius: 6px;
+    padding: 2px 4px;
+}
+
+QCalendarWidget QAbstractItemView {
+    background-color: #0D1220;
+    color: #F8FAFC;
+    selection-background-color: #00F5A0;
+    selection-color: #061017;
+    alternate-background-color: #0A0F1C;
+    outline: none;
+}
+
+QCalendarWidget QAbstractItemView:disabled {
+    color: #566174;
+}
+
 QLabel#titleLabel {
     font-size: 30px;
     font-weight: 800;
@@ -583,6 +657,89 @@ QLabel#summaryTotalLabel {
     color: #F8FAFC;
     font-size: 16px;
     font-weight: 700;
+}
+
+QFrame#historyManageHeader {
+    background-color: #0D1220;
+    border: 1px solid #1E2A3F;
+    border-radius: 12px;
+}
+
+QLabel#historyManageTitle {
+    color: #F8FAFC;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+QLabel#historyManageHint {
+    color: #A8B3C7;
+    font-size: 12px;
+}
+
+QFrame#historyManageSummaryCard {
+    background-color: #0A0F1C;
+    border: 1px solid #182235;
+    border-radius: 12px;
+}
+
+QLabel#historyManageSummaryTitle,
+QLabel#historyManageModesTitle {
+    color: #F8FAFC;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#historyManageTotalLabel {
+    color: #00F5A0;
+    font-size: 30px;
+    font-weight: 800;
+    padding: 0;
+}
+
+QWidget[class="historyManageModeRow"] {
+    background-color: #111827;
+    border-radius: 8px;
+}
+
+QLabel[class="historyManageModeName"] {
+    color: #F8FAFC;
+    font-size: 13px;
+}
+
+QLabel[class="historyManageModeDuration"] {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#historyManageEmpty {
+    color: #A8B3C7;
+    font-size: 13px;
+    padding: 14px 8px;
+}
+
+QPushButton#deleteRecordsButton {
+    background-color: #2A1020;
+    color: #FF8FB0;
+    border: 1px solid #FF5C8A;
+    border-radius: 10px;
+    font-weight: 700;
+    min-height: 36px;
+}
+
+QPushButton#deleteRecordsButton:hover {
+    background-color: #3A1428;
+    color: #FFFFFF;
+    border-color: #FF8FB0;
+}
+
+QPushButton#deleteRecordsButton:pressed {
+    background-color: #4A1831;
+}
+
+QPushButton#deleteRecordsButton:disabled {
+    background-color: #0A0F1C;
+    color: #566174;
+    border-color: #182235;
 }
 
 QMessageBox {

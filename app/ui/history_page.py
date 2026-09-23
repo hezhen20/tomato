@@ -2,15 +2,17 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QTabWidget, QHeaderView, QFrame,
-    QToolTip, QSizePolicy,
+    QToolTip, QSizePolicy, QDateTimeEdit, QCalendarWidget, QMessageBox,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QCursor
-from datetime import date, timedelta
+from PySide6.QtCore import Qt, QDateTime, QTime
+from PySide6.QtGui import QColor, QCursor, QFont
+from datetime import date, datetime, timedelta
 
 from app.database import (
     PERIOD_KEYS,
     PERIOD_LABELS,
+    delete_records_in_datetime_range,
+    get_records_in_datetime_range,
     get_range_period_summary,
 )
 from app.ui.colors import readable_color
@@ -60,9 +62,11 @@ class HistoryPage(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
 
         tabs = QTabWidget()
+        self._tabs = tabs
         tabs.addTab(self._build_day_tab(), "日")
         tabs.addTab(self._build_week_tab(), "周")
         tabs.addTab(self._build_month_tab(), "月")
+        tabs.addTab(self._build_manage_tab(), "管理")
         tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(tabs)
 
@@ -197,9 +201,122 @@ class HistoryPage(QWidget):
 
         return w
 
+    def _build_manage_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(12)
+        layout.setContentsMargins(0, 8, 0, 0)
+
+        header = QFrame()
+        header.setObjectName("historyManageHeader")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(16, 14, 16, 14)
+        header_layout.setSpacing(5)
+
+        title = QLabel("清理计时记录")
+        title.setObjectName("historyManageTitle")
+        header_layout.addWidget(title)
+
+        hint = QLabel("选择精确到分钟的时间范围，先预览再删除。结束分钟包含在范围内；删除后无法恢复。")
+        hint.setObjectName("historyManageHint")
+        hint.setWordWrap(True)
+        header_layout.addWidget(hint)
+        layout.addWidget(header)
+
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+
+        from_label = QLabel("从")
+        from_label.setProperty("class", "mutedLabel")
+        filter_row.addWidget(from_label)
+        self.manage_start_edit = self._build_datetime_edit()
+        self.manage_start_edit.dateTimeChanged.connect(self._refresh_manage_records)
+        filter_row.addWidget(self.manage_start_edit)
+
+        to_label = QLabel("到")
+        to_label.setProperty("class", "mutedLabel")
+        filter_row.addWidget(to_label)
+        self.manage_end_edit = self._build_datetime_edit()
+        self.manage_end_edit.dateTimeChanged.connect(self._refresh_manage_records)
+        filter_row.addWidget(self.manage_end_edit)
+
+        filter_row.addStretch()
+        layout.addLayout(filter_row)
+
+        summary_card = QFrame()
+        summary_card.setObjectName("historyManageSummaryCard")
+        summary_layout = QVBoxLayout(summary_card)
+        summary_layout.setContentsMargins(16, 16, 16, 16)
+        summary_layout.setSpacing(10)
+
+        summary_title = QLabel("范围内汇总")
+        summary_title.setObjectName("historyManageSummaryTitle")
+        summary_layout.addWidget(summary_title)
+
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(28)
+
+        total_column = QVBoxLayout()
+        total_caption = QLabel("累计专注")
+        total_caption.setProperty("class", "mutedLabel")
+        total_column.addWidget(total_caption)
+        self.manage_total_label = QLabel("0m")
+        self.manage_total_label.setObjectName("historyManageTotalLabel")
+        total_column.addWidget(self.manage_total_label)
+        stats_row.addLayout(total_column)
+
+        stats_row.addStretch()
+        summary_layout.addLayout(stats_row)
+
+        modes_title = QLabel("按模式")
+        modes_title.setObjectName("historyManageModesTitle")
+        summary_layout.addWidget(modes_title)
+
+        self.manage_mode_layout = QVBoxLayout()
+        self.manage_mode_layout.setSpacing(6)
+        summary_layout.addLayout(self.manage_mode_layout)
+
+        self.manage_empty_label = QLabel()
+        self.manage_empty_label.setObjectName("historyManageEmpty")
+        self.manage_empty_label.setAlignment(Qt.AlignCenter)
+        self.manage_empty_label.setWordWrap(True)
+        summary_layout.addWidget(self.manage_empty_label)
+        layout.addWidget(summary_card, 1)
+
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        self.manage_delete_btn = QPushButton("删除记录")
+        self.manage_delete_btn.setObjectName("deleteRecordsButton")
+        self.manage_delete_btn.setMinimumWidth(148)
+        self.manage_delete_btn.clicked.connect(self._confirm_delete_records)
+        action_row.addWidget(self.manage_delete_btn)
+        layout.addLayout(action_row)
+
+        now = QDateTime.currentDateTime()
+        self.manage_start_edit.setDateTime(QDateTime(now.date(), QTime(0, 0)))
+        self.manage_end_edit.setDateTime(now.addSecs(-now.time().second()))
+        return w
+
+    def _build_datetime_edit(self):
+        edit = QDateTimeEdit()
+        edit.setCalendarPopup(True)
+        edit.setDisplayFormat("yyyy/MM/dd HH:mm")
+        edit.setMaximumDateTime(QDateTime.currentDateTime())
+        edit.setMinimumWidth(184)
+        edit.setFixedHeight(38)
+        edit.setFont(QFont("Microsoft YaHei UI", 10))
+
+        calendar = edit.calendarWidget()
+        calendar.setFont(QFont("Microsoft YaHei UI", 10))
+        calendar.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
+        return edit
+
     def refresh(self):
         self._current_date = date.today()
         self._refresh_day()
+        self._refresh_week()
+        self._refresh_month()
+        self._refresh_manage_records()
 
     def _on_tab_changed(self, index):
         if index == 0:
@@ -208,6 +325,8 @@ class HistoryPage(QWidget):
             self._refresh_week()
         elif index == 2:
             self._refresh_month()
+        elif index == 3:
+            self._refresh_manage_records()
 
     # ---- 日视图 ----
     def _nav_day(self, delta):
@@ -416,6 +535,112 @@ class HistoryPage(QWidget):
         row.addWidget(duration_lbl)
 
         return row_widget
+
+    # ---- 记录管理 ----
+    def _manage_dates(self):
+        start_at = self.manage_start_edit.dateTime().toPython().replace(second=0, microsecond=0)
+        end_minute = self.manage_end_edit.dateTime().toPython().replace(second=0, microsecond=0)
+        return start_at, end_minute, end_minute + timedelta(minutes=1)
+
+    def _refresh_manage_records(self, *_):
+        start_at, end_minute, end_exclusive = self._manage_dates()
+        self._clear_layout(self.manage_mode_layout)
+
+        if start_at >= end_exclusive:
+            self.manage_total_label.setText("—")
+            self.manage_empty_label.setText("起始时间不能晚于结束时间，请调整后再试。")
+            self.manage_empty_label.setVisible(True)
+            self.manage_delete_btn.setText("删除此范围记录")
+            self.manage_delete_btn.setEnabled(False)
+            self._manage_records = []
+            return
+
+        records = get_records_in_datetime_range(start_at, end_exclusive)
+        total_seconds = sum(int(record.get("duration_seconds") or 0) for record in records)
+        self._manage_records = records
+        self.manage_total_label.setText(format_duration(total_seconds))
+        self.manage_delete_btn.setText("删除此范围记录")
+        self.manage_delete_btn.setEnabled(bool(records))
+        self.manage_empty_label.setVisible(not records)
+        self.manage_empty_label.setText(
+            "这个范围内没有可删除的已完成记录。\n当前进行中的计时会保留。"
+        )
+
+        mode_totals = {}
+        for record in records:
+            name = record.get("mode_name") or "已删除模式"
+            info = mode_totals.setdefault(
+                name,
+                {"seconds": 0, "color": record.get("mode_color") or "#A8B3C7"},
+            )
+            info["seconds"] += int(record.get("duration_seconds") or 0)
+
+        for name, info in sorted(
+            mode_totals.items(), key=lambda item: item[1]["seconds"], reverse=True
+        ):
+            self.manage_mode_layout.addWidget(
+                self._build_manage_mode_row(name, info["seconds"], info["color"])
+            )
+
+    def _build_manage_mode_row(self, name: str, seconds: int, color: str) -> QWidget:
+        row_widget = QWidget()
+        row_widget.setProperty("class", "historyManageModeRow")
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(10, 7, 10, 7)
+        row.setSpacing(7)
+
+        display_color = readable_color(color)
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color: {display_color}; font-size: 13px;")
+        row.addWidget(dot)
+
+        name_label = QLabel(name)
+        name_label.setProperty("class", "historyManageModeName")
+        row.addWidget(name_label)
+        row.addStretch()
+
+        duration_label = QLabel(format_duration(seconds))
+        duration_label.setProperty("class", "historyManageModeDuration")
+        duration_label.setStyleSheet(f"color: {display_color};")
+        row.addWidget(duration_label)
+        return row_widget
+
+    def _confirm_delete_records(self):
+        start_at, end_minute, end_exclusive = self._manage_dates()
+        records = getattr(self, "_manage_records", [])
+        if start_at >= end_exclusive or not records:
+            return
+
+        total_seconds = sum(int(record.get("duration_seconds") or 0) for record in records)
+        date_text = self._format_manage_range(start_at, end_minute)
+        message_box = QMessageBox(self)
+        message_box.setIcon(QMessageBox.Warning)
+        message_box.setWindowTitle("确认删除记录")
+        message_box.setText(f"确定删除 {date_text} 内的专注记录吗？")
+        message_box.setInformativeText(
+            f"将移除合计 {format_duration(total_seconds)}。此操作无法撤销，正在进行中的计时不会被删除。"
+        )
+        message_box.setStandardButtons(QMessageBox.Cancel | QMessageBox.Yes)
+        message_box.setDefaultButton(QMessageBox.Cancel)
+        if message_box.exec() != QMessageBox.Yes:
+            return
+
+        delete_records_in_datetime_range(start_at, end_exclusive)
+        self._refresh_manage_records()
+        self._refresh_day()
+        self._refresh_week()
+        self._refresh_month()
+
+        notice = QMessageBox(self)
+        notice.setIcon(QMessageBox.Information)
+        notice.setWindowTitle("已删除")
+        notice.setText("已删除所选时间范围内的专注记录。")
+        notice.setStandardButtons(QMessageBox.Ok)
+        notice.exec()
+
+    @staticmethod
+    def _format_manage_range(start_at: datetime, end_minute: datetime) -> str:
+        return f"{start_at.strftime('%Y/%m/%d %H:%M')} — {end_minute.strftime('%Y/%m/%d %H:%M')}"
 
     def _add_summary_row(self, parent_layout, summary: dict, total: int):
         if not summary:
