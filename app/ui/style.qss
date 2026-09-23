@@ -151,6 +151,7 @@ QPushButton#dangerButton {
     border-radius: 8px;
     padding: 4px 8px;
     min-height: 26px;
+    min-width: 50px;
 }
 
 QPushButton#dangerButton:hover {
@@ -443,12 +444,34 @@ QTableWidget {
     alternate-background-color: #0A0F1C;
 }
 
+QTableView {
+    background-color: #0D1220;
+    color: #F8FAFC;
+    border: 1px solid #1E2A3F;
+    border-radius: 12px;
+    gridline-color: transparent;
+    font-size: 13px;
+    selection-background-color: #102A33;
+    selection-color: #F8FAFC;
+    alternate-background-color: #0A0F1C;
+}
+
 QTableWidget::item {
     padding: 8px 10px;
     border-bottom: 1px solid #182235;
 }
 
 QTableWidget::item:selected {
+    background-color: #102A33;
+    color: #F8FAFC;
+}
+
+QTableView::item {
+    padding: 8px 10px;
+    border-bottom: 1px solid #182235;
+}
+
+QTableView::item:selected {
     background-color: #102A33;
     color: #F8FAFC;
 }
@@ -523,12 +546,12 @@ QTabWidget::pane {
 QTabBar::tab {
     background-color: transparent;
     color: #A8B3C7;
-    padding: 8px 18px;
-    margin-right: 6px;
+    padding: 7px 8px;
+    margin-right: 2px;
     border: none;
     border-radius: 16px;
-    font-size: 14px;
-    min-width: 54px;
+    font-size: 13px;
+    min-width: 0;
 }
 
 QTabBar::tab:selected {

@@ -178,6 +178,7 @@ class MainPage(QWidget):
         self._mode_buttons.clear()
 
         modes = get_modes()
+        current_mode_id = self._current_mode["id"] if self._current_mode else None
         for mode in modes:
             btn = QPushButton(mode["name"])
             btn.setProperty("class", "modeBtn")
@@ -213,6 +214,14 @@ class MainPage(QWidget):
             btn.clicked.connect(lambda checked, m=mode: self._on_mode_click(m))
             self.modes_layout.addWidget(btn)
             self._mode_buttons.append(btn)
+
+        # 设置页修改模式名称/颜色后，正在计时的页面也立即使用最新数据。
+        if current_mode_id is not None:
+            latest_mode = next((mode for mode in modes if mode["id"] == current_mode_id), None)
+            if latest_mode is not None:
+                self._current_mode = latest_mode
+                self.mode_label.setText(f"● {latest_mode['name']}")
+                self.mode_label.setStyleSheet(f"color: {readable_color(latest_mode['color'])};")
 
     def _on_mode_click(self, mode: dict):
         if self._running and self._current_mode and self._current_mode["id"] == mode["id"]:

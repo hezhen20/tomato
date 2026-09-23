@@ -6,14 +6,11 @@ from PySide6.QtWidgets import (
     QColorDialog,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QTabWidget,
-    QTableWidget,
-    QTableWidgetItem,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -36,10 +33,12 @@ from app.database import (
     get_modes,
     get_setting,
     set_setting,
+    update_mode,
     verify_user,
 )
 from app.hotkeys import MODE_ACTION_PREFIX, mode_action_name
 from app.ui.colors import color_swatch_style
+from app.ui.mode_table import ModeTableView
 
 _KEY_NAMES = {
     Qt.Key_Control: "Ctrl",
@@ -201,6 +200,9 @@ class SettingsPage(QWidget):
         self._username = username
         self.hotkey_recorders = {}
         self._mode_hotkey_row_widgets = []
+        self._editing_mode_id = None
+        self._editing_mode_name = ""
+        self._editing_color = "#FF9800"
         self._setup_ui()
 
     def _setup_ui(self):
@@ -216,6 +218,8 @@ class SettingsPage(QWidget):
         tabs.addTab(self._build_reminder_tab(), "休息提醒")
         tabs.addTab(self._build_floating_tab(), "悬浮窗")
         tabs.addTab(self._build_password_tab(), "修改密码")
+        tabs.tabBar().setExpanding(False)
+        tabs.tabBar().setElideMode(Qt.ElideNone)
         layout.addWidget(tabs)
 
     def _build_modes_tab(self):
@@ -242,19 +246,47 @@ class SettingsPage(QWidget):
         add_layout.addWidget(add_btn)
         layout.addLayout(add_layout)
 
-        self.modes_table = QTableWidget()
-        self.modes_table.setColumnCount(3)
-        self.modes_table.setHorizontalHeaderLabels(["名称", "颜色", "操作"])
-        self.modes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.modes_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
-        self.modes_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self.modes_table.setColumnWidth(1, 60)
-        self.modes_table.setColumnWidth(2, 80)
-        self.modes_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.modes_table.setAlternatingRowColors(True)
-        self.modes_table.setShowGrid(False)
-        self.modes_table.verticalHeader().setVisible(False)
-        self.modes_table.verticalHeader().setDefaultSectionSize(40)
+        edit_panel = QFrame()
+        edit_panel.setObjectName("settingsCard")
+        edit_layout = QHBoxLayout(edit_panel)
+        edit_layout.setContentsMargins(10, 8, 10, 8)
+        edit_layout.setSpacing(8)
+
+        self.edit_mode_input = QLineEdit()
+        self.edit_mode_input.setPlaceholderText("编辑模式名称")
+        edit_layout.addWidget(self.edit_mode_input, 1)
+
+        self.edit_color_btn = QPushButton()
+        self.edit_color_btn.setProperty("class", "colorBtn")
+        self.edit_color_btn.setFixedSize(32, 32)
+        self.edit_color_btn.setStyleSheet(color_swatch_style(self._editing_color))
+        self.edit_color_btn.clicked.connect(self._pick_edit_color)
+        edit_layout.addWidget(self.edit_color_btn)
+
+        save_edit_btn = QPushButton("保存")
+        save_edit_btn.setObjectName("primaryButton")
+        save_edit_btn.setFixedWidth(54)
+        save_edit_btn.clicked.connect(self._save_mode_edit)
+        edit_layout.addWidget(save_edit_btn)
+
+        cancel_edit_btn = QPushButton("取消")
+        cancel_edit_btn.setObjectName("ghostButton")
+        cancel_edit_btn.setFixedWidth(54)
+        cancel_edit_btn.clicked.connect(self._cancel_mode_edit)
+        edit_layout.addWidget(cancel_edit_btn)
+
+        self._edit_mode_panel = edit_panel
+        self._edit_mode_panel.setVisible(False)
+        layout.addWidget(self._edit_mode_panel)
+
+        hint = QLabel("点击“编辑”修改模式名称或颜色，历史记录会继续保留。")
+        hint.setProperty("class", "mutedLabel")
+        layout.addWidget(hint)
+
+        self.modes_table = ModeTableView()
+        self.modes_table.mode_delegate.editRequested.connect(self._edit_mode_row)
+        self.modes_table.mode_delegate.deleteRequested.connect(self._delete_mode_row)
+        self.modes_table.mode_delegate.colorRequested.connect(self._edit_mode_row)
         layout.addWidget(self.modes_table)
 
         self._refresh_modes_table()
@@ -265,6 +297,12 @@ class SettingsPage(QWidget):
         if color.isValid():
             self._new_color = color.name()
             self.color_btn.setStyleSheet(color_swatch_style(self._new_color))
+
+    def _pick_edit_color(self):
+        color = QColorDialog.getColor(QColor(self._editing_color), self, "选择颜色")
+        if color.isValid():
+            self._editing_color = color.name()
+            self.edit_color_btn.setStyleSheet(color_swatch_style(self._editing_color))
 
     def _add_mode(self):
         name = self.new_mode_input.text().strip()
@@ -285,32 +323,70 @@ class SettingsPage(QWidget):
             return
 
         delete_mode(mode_id)
+        if self._editing_mode_id == mode_id:
+            self._cancel_mode_edit()
         self._refresh_modes_table()
         self.modes_changed.emit()
 
+    def _edit_mode_row(self, row: int):
+        mode = self.modes_table.mode_model.mode_at(row)
+        if mode is not None:
+            self._start_mode_edit(mode["id"])
+
+    def _delete_mode_row(self, row: int):
+        mode = self.modes_table.mode_model.mode_at(row)
+        if mode is not None:
+            self._delete_mode(mode["id"])
+
+    def _start_mode_edit(self, mode_id: int):
+        mode = next((item for item in get_modes() if item["id"] == mode_id), None)
+        if mode is None:
+            return
+
+        self._editing_mode_id = mode_id
+        self._editing_mode_name = mode["name"]
+        self._editing_color = mode["color"]
+        self.edit_mode_input.setText(mode["name"])
+        self.edit_color_btn.setStyleSheet(color_swatch_style(mode["color"]))
+        self._edit_mode_panel.setVisible(True)
+        self.edit_mode_input.setFocus()
+        self.edit_mode_input.selectAll()
+
+    def _cancel_mode_edit(self):
+        self._editing_mode_id = None
+        self._editing_mode_name = ""
+        self._edit_mode_panel.setVisible(False)
+        self.edit_mode_input.clear()
+
+    def _save_mode_edit(self):
+        if self._editing_mode_id is None:
+            return
+
+        name = self.edit_mode_input.text().strip()
+        color = self._editing_color
+        if not name:
+            QMessageBox.warning(self, "提示", "模式名称不能为空。")
+            self.edit_mode_input.setFocus()
+            return
+
+        for other in get_modes():
+            if other["id"] != self._editing_mode_id and other["name"].strip().casefold() == name.casefold():
+                QMessageBox.warning(self, "提示", "模式名称不能重复。")
+                self.edit_mode_input.setFocus()
+                return
+
+        try:
+            update_mode(self._editing_mode_id, name, color)
+            if name != self._editing_mode_name:
+                self._hotkey_manager.rename_mode_hotkey(self._editing_mode_name, name)
+            self._cancel_mode_edit()
+            self._refresh_modes_table()
+            self.modes_changed.emit()
+        except Exception as exc:
+            QMessageBox.warning(self, "错误", f"保存失败: {exc}")
+
     def _refresh_modes_table(self):
-        modes = get_modes()
-        self.modes_table.setRowCount(len(modes))
-
-        for index, mode in enumerate(modes):
-            self.modes_table.setItem(index, 0, QTableWidgetItem(mode["name"]))
-
-            color_item = QTableWidgetItem("  ")
-            color_item.setBackground(QColor(mode["color"]))
-            color_item.setTextAlignment(Qt.AlignCenter)
-            self.modes_table.setItem(index, 1, color_item)
-
-            del_btn = QPushButton("删除")
-            del_btn.setObjectName("dangerButton")
-            del_btn.setFixedSize(58, 30)
-            del_btn.clicked.connect(lambda _, mid=mode["id"]: self._delete_mode(mid))
-
-            del_container = QWidget()
-            del_layout = QHBoxLayout(del_container)
-            del_layout.setContentsMargins(0, 0, 0, 0)
-            del_layout.setSpacing(0)
-            del_layout.addWidget(del_btn, alignment=Qt.AlignCenter)
-            self.modes_table.setCellWidget(index, 2, del_container)
+        self.modes_table.mode_model.set_modes(get_modes())
 
     def _build_hotkeys_tab(self):
         widget = QWidget()

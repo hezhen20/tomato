@@ -61,6 +61,21 @@ class HotkeyManager(QObject):
             del self._hotkeys[key]
             self.save_hotkeys()
 
+    def rename_mode_hotkey(self, old_name: str, new_name: str):
+        """改名时迁移模式快捷键，避免用户保存的组合键丢失。"""
+        if old_name == new_name:
+            return
+
+        old_action = mode_action_name(old_name)
+        new_action = mode_action_name(new_name)
+        if old_action not in self._hotkeys:
+            return
+
+        hotkey = self._hotkeys.pop(old_action)
+        if new_action not in self._hotkeys or hotkey:
+            self._hotkeys[new_action] = hotkey
+        self.save_hotkeys()
+
     def sync_mode_hotkeys(self, save: bool = True) -> bool:
         current_mode_actions = {mode_action_name(mode["name"]) for mode in get_modes()}
         existing_mode_actions = {
