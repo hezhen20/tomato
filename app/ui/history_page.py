@@ -301,7 +301,7 @@ class HistoryPage(QWidget):
         edit = QDateTimeEdit()
         edit.setCalendarPopup(True)
         edit.setDisplayFormat("yyyy/MM/dd HH:mm")
-        edit.setMaximumDateTime(QDateTime.currentDateTime())
+        # Future timestamps are safe for filtering and keep two-digit hour entry usable.
         edit.setMinimumWidth(184)
         edit.setFixedHeight(38)
         edit.setFont(QFont("Microsoft YaHei UI", 10))

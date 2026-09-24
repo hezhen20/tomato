@@ -300,13 +300,15 @@ QDateTimeEdit::drop-down {
 }
 
 QCalendarWidget {
-    background-color: #0D1220;
+    background-color: #111827;
     color: #F8FAFC;
+    border: 1px solid #2A3650;
+    border-radius: 8px;
 }
 
 QCalendarWidget QWidget#qt_calendar_navigationbar {
-    background-color: #111827;
-    border-bottom: 1px solid #243047;
+    background-color: #172238;
+    border-bottom: 1px solid #2A3650;
 }
 
 QCalendarWidget QToolButton {
@@ -320,7 +322,7 @@ QCalendarWidget QToolButton {
 }
 
 QCalendarWidget QToolButton:hover {
-    background-color: #102636;
+    background-color: #1A3A4B;
     color: #7DF9FF;
 }
 
@@ -329,24 +331,24 @@ QCalendarWidget QToolButton::menu-indicator {
 }
 
 QCalendarWidget QSpinBox {
-    background-color: #0A0F1C;
+    background-color: #121A2A;
     color: #F8FAFC;
-    border: 1px solid #243047;
+    border: 1px solid #2A3650;
     border-radius: 6px;
     padding: 2px 4px;
 }
 
 QCalendarWidget QAbstractItemView {
-    background-color: #0D1220;
+    background-color: #111827;
     color: #F8FAFC;
     selection-background-color: #00F5A0;
     selection-color: #061017;
-    alternate-background-color: #0A0F1C;
+    alternate-background-color: #162033;
     outline: none;
 }
 
 QCalendarWidget QAbstractItemView:disabled {
-    color: #566174;
+    color: #6F7E95;
 }
 
 QLabel#titleLabel {
@@ -548,6 +550,12 @@ QTableView::item {
 QTableView::item:selected {
     background-color: #102A33;
     color: #F8FAFC;
+}
+
+/* Calendar cells need their full width for two-digit dates. */
+QCalendarWidget QAbstractItemView::item {
+    padding: 0;
+    border: none;
 }
 
 QToolTip {

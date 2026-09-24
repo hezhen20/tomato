@@ -365,9 +365,36 @@ class TestHistoryPageUi(unittest.TestCase):
         finally:
             page.deleteLater()
 
+    def test_calendar_cells_override_table_padding(self):
+        style_path = Path(__file__).resolve().parents[1] / "app" / "ui" / "style.qss"
+        style = style_path.read_text(encoding="utf-8")
+        calendar_item_rule = style.split("QCalendarWidget QAbstractItemView::item", 1)[1]
+        self.assertIn("padding: 0;", calendar_item_rule.split("}", 1)[0])
+
 
 class TestRecordManagement(unittest.TestCase):
     """记录管理的范围筛选与删除逻辑"""
+
+    def test_datetime_editor_accepts_two_digit_hour(self):
+        page = HistoryPage()
+        try:
+            editor = page.manage_end_edit
+            editor.setDateTime(page.manage_start_edit.dateTime())
+            editor.lineEdit().setSelection(11, 2)
+            QTest.keyClicks(editor.lineEdit(), "12")
+            self.assertEqual(editor.dateTime().time().hour(), 12)
+        finally:
+            page.deleteLater()
+
+    def test_datetime_editor_keeps_later_dates_selectable(self):
+        page = HistoryPage()
+        try:
+            editor = page.manage_end_edit
+            later = editor.dateTime().addDays(30)
+            editor.setDateTime(later)
+            self.assertEqual(editor.dateTime(), later)
+        finally:
+            page.deleteLater()
 
     def _insert_record(self, start: datetime, duration_seconds: int, end_time=True):
         mode = get_modes()[0]
