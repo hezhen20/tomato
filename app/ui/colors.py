@@ -3,10 +3,10 @@
 from PySide6.QtGui import QColor
 
 
-INK = "#061017"
-WHITE = "#F8FAFC"
-SURFACE = "#0D1220"
-BRAND_GREEN = "#00F5A0"
+INK = "#17271F"
+WHITE = "#F4F5F7"
+SURFACE = "#202227"
+BRAND_GREEN = "#A8D5BA"
 
 
 def _color(value: str, fallback: str = BRAND_GREEN) -> QColor:
@@ -78,7 +78,10 @@ def foreground_for(background: str) -> str:
     bg = _color(background).name().upper()
     white_ratio = contrast_ratio(WHITE, bg)
     ink_ratio = contrast_ratio(INK, bg)
-    return WHITE if white_ratio >= ink_ratio else INK
+    preferred = WHITE if white_ratio >= ink_ratio else INK
+    if contrast_ratio(preferred, bg) >= 4.5:
+        return preferred
+    return max(("#FFFFFF", "#000000"), key=lambda value: contrast_ratio(value, bg))
 
 
 def color_swatch_style(color: str, radius: int = 16) -> str:

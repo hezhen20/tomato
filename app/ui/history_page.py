@@ -2,7 +2,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QTabWidget, QHeaderView, QFrame,
-    QToolTip, QSizePolicy, QDateTimeEdit, QCalendarWidget, QMessageBox,
+    QToolTip, QSizePolicy, QDateTimeEdit, QCalendarWidget, QMessageBox, QScrollArea, QLayout,
 )
 from PySide6.QtCore import Qt, QDateTime, QTime
 from PySide6.QtGui import QColor, QCursor, QFont
@@ -16,6 +16,8 @@ from app.database import (
     get_range_period_summary,
 )
 from app.ui.colors import readable_color
+from app.ui.components import ActivityChart, ElidedLabel, icon, page_header, scroll_page
+from app.ui.theme import current_theme, theme_colors, mode_display_color
 
 
 def format_duration(seconds: int) -> str:
@@ -58,22 +60,37 @@ class HistoryPage(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(14)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.addWidget(page_header("时间统计", "回看每一段投入，看见自己的节奏。"))
 
         tabs = QTabWidget()
         self._tabs = tabs
-        tabs.addTab(self._build_day_tab(), "日")
+        tabs.addTab(scroll_page(self._build_day_tab()), "日")
         tabs.addTab(self._build_week_tab(), "周")
         tabs.addTab(self._build_month_tab(), "月")
-        tabs.addTab(self._build_manage_tab(), "管理")
+        tabs.addTab(scroll_page(self._build_manage_tab()), "管理")
+        tabs.tabBar().setExpanding(False)
         tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(tabs)
+        for button in (self.day_prev, self.week_prev, self.month_prev):
+            button.setText("")
+            button.setIcon(icon("chevron-left"))
+            button.setToolTip("上一时段")
+            button.setAccessibleName("上一时段")
+        for button in (self.day_next, self.week_next, self.month_next):
+            button.setText("")
+            button.setIcon(icon("chevron-right"))
+            button.setToolTip("下一时段")
+            button.setAccessibleName("下一时段")
+        for button in self.findChildren(QPushButton):
+            button.setCursor(Qt.PointingHandCursor)
 
     def _build_day_tab(self):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
+        layout.setContentsMargins(0, 24, 4, 0)
 
         # 日期导航
         nav = QHBoxLayout()
@@ -111,6 +128,7 @@ class HistoryPage(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
+        layout.setContentsMargins(0, 24, 0, 0)
 
         nav = QHBoxLayout()
         self.week_prev = QPushButton("◀")
@@ -135,6 +153,9 @@ class HistoryPage(QWidget):
         self.week_summary_layout = QVBoxLayout()
         layout.addLayout(self.week_summary_layout)
 
+        self.week_chart = ActivityChart()
+        layout.addWidget(self.week_chart)
+
         # 每日柱状图（用文本模拟）
         self.week_table = QTableWidget()
         self.week_table.setColumnCount(4)
@@ -146,12 +167,12 @@ class HistoryPage(QWidget):
         self.week_table.setAlternatingRowColors(True)
         self.week_table.setShowGrid(False)
         self.week_table.verticalHeader().setVisible(False)
-        self.week_table.verticalHeader().setDefaultSectionSize(36)
+        self.week_table.verticalHeader().setDefaultSectionSize(44)
         self.week_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.week_table.itemClicked.connect(
             lambda item: self._show_period_detail_tooltip(self.week_table, item)
         )
-        layout.addWidget(self.week_table)
+        layout.addWidget(self.week_table, 1)
 
         return w
 
@@ -159,6 +180,7 @@ class HistoryPage(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
+        layout.setContentsMargins(0, 24, 0, 0)
 
         nav = QHBoxLayout()
         self.month_prev = QPushButton("◀")
@@ -182,6 +204,9 @@ class HistoryPage(QWidget):
         self.month_summary_layout = QVBoxLayout()
         layout.addLayout(self.month_summary_layout)
 
+        self.month_chart = ActivityChart()
+        layout.addWidget(self.month_chart)
+
         self.month_table = QTableWidget()
         self.month_table.setColumnCount(4)
         self.month_table.setHorizontalHeaderLabels(["日期", "模式", "明细", "时长"])
@@ -192,12 +217,12 @@ class HistoryPage(QWidget):
         self.month_table.setAlternatingRowColors(True)
         self.month_table.setShowGrid(False)
         self.month_table.verticalHeader().setVisible(False)
-        self.month_table.verticalHeader().setDefaultSectionSize(36)
+        self.month_table.verticalHeader().setDefaultSectionSize(44)
         self.month_table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.month_table.itemClicked.connect(
             lambda item: self._show_period_detail_tooltip(self.month_table, item)
         )
-        layout.addWidget(self.month_table)
+        layout.addWidget(self.month_table, 1)
 
         return w
 
@@ -205,12 +230,12 @@ class HistoryPage(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
-        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setContentsMargins(0, 24, 4, 0)
 
         header = QFrame()
         header.setObjectName("historyManageHeader")
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(16, 14, 16, 14)
+        header_layout.setContentsMargins(0, 0, 0, 10)
         header_layout.setSpacing(5)
 
         title = QLabel("清理计时记录")
@@ -275,13 +300,15 @@ class HistoryPage(QWidget):
         self.manage_mode_layout = QVBoxLayout()
         self.manage_mode_layout.setSpacing(6)
         summary_layout.addLayout(self.manage_mode_layout)
+        summary_layout.addStretch()
 
         self.manage_empty_label = QLabel()
         self.manage_empty_label.setObjectName("historyManageEmpty")
         self.manage_empty_label.setAlignment(Qt.AlignCenter)
         self.manage_empty_label.setWordWrap(True)
         summary_layout.addWidget(self.manage_empty_label)
-        layout.addWidget(summary_card, 1)
+        layout.addWidget(summary_card)
+        layout.addStretch()
 
         action_row = QHBoxLayout()
         action_row.addStretch()
@@ -313,6 +340,12 @@ class HistoryPage(QWidget):
 
     def refresh(self):
         self._current_date = date.today()
+        self._refresh_day()
+        self._refresh_week()
+        self._refresh_month()
+        self._refresh_manage_records()
+
+    def refresh_theme(self):
         self._refresh_day()
         self._refresh_week()
         self._refresh_month()
@@ -379,6 +412,10 @@ class HistoryPage(QWidget):
         self._add_summary_row(self.week_summary_layout, merged, total)
 
         self._populate_period_table(self.week_table, data)
+        self.week_chart.set_days([
+            (WEEKDAYS[i], sum(info["seconds"] for info in data.get((monday + timedelta(days=i)).isoformat(), {}).values()))
+            for i in range(7)
+        ])
 
     # ---- 月视图 ----
     def _nav_month(self, delta):
@@ -415,6 +452,10 @@ class HistoryPage(QWidget):
         self._add_summary_row(self.month_summary_layout, merged, total)
 
         self._populate_period_table(self.month_table, data)
+        self.month_chart.set_days([
+            (str(day), sum(info["seconds"] for info in data.get(date(y, m, day).isoformat(), {}).values()))
+            for day in range(1, last_day.day + 1)
+        ])
 
     # ---- 工具方法 ----
     def _populate_period_table(self, table: QTableWidget, data: dict):
@@ -480,7 +521,7 @@ class HistoryPage(QWidget):
             detail_item = QTableWidgetItem("查看")
             detail_item.setToolTip(detail)
             detail_item.setData(Qt.UserRole, detail)
-            detail_item.setForeground(QColor("#7DF9FF"))
+            detail_item.setForeground(QColor(current_theme().colors["accent_text"]))
             detail_item.setTextAlignment(Qt.AlignCenter)
             if row["is_total"]:
                 detail_font = detail_item.font()
@@ -528,9 +569,15 @@ class HistoryPage(QWidget):
         layout.setSpacing(8)
         layout.setContentsMargins(16, 14, 16, 14)
 
-        title = QLabel(f"{PERIOD_ICONS[period_key]} {PERIOD_LABELS[period_key]}")
+        title_row = QHBoxLayout()
+        mark = QLabel()
+        mark.setPixmap(icon({"morning": "sun", "afternoon": "sunset", "evening": "moon"}[period_key]).pixmap(18, 18))
+        title_row.addWidget(mark)
+        title = QLabel(PERIOD_LABELS[period_key])
         title.setProperty("class", "periodTitle")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        layout.addLayout(title_row)
 
         time_range = QLabel(PERIOD_TIME_RANGES[period_key])
         time_range.setProperty("class", "periodRange")
@@ -565,18 +612,17 @@ class HistoryPage(QWidget):
         row_widget = QWidget()
         row_widget.setProperty("class", "periodModeRow")
         row = QHBoxLayout(row_widget)
-        row.setContentsMargins(10, 6, 10, 6)
+        row.setContentsMargins(0, 6, 0, 6)
         row.setSpacing(6)
 
-        display_color = readable_color(info["color"])
+        display_color = mode_display_color(info["color"])
         dot = QLabel("●")
         dot.setStyleSheet(f"color: {display_color}; font-size: 14px;")
         row.addWidget(dot)
 
-        name_lbl = QLabel(name)
+        name_lbl = ElidedLabel(name)
         name_lbl.setProperty("class", "periodModeName")
-        row.addWidget(name_lbl)
-        row.addStretch()
+        row.addWidget(name_lbl, 1)
 
         seconds = int(info["periods"].get(period_key, 0) or 0)
         duration_lbl = QLabel(format_duration(seconds))
@@ -638,15 +684,14 @@ class HistoryPage(QWidget):
         row.setContentsMargins(10, 7, 10, 7)
         row.setSpacing(7)
 
-        display_color = readable_color(color)
+        display_color = mode_display_color(color, theme_colors()["surface_alt"])
         dot = QLabel("●")
         dot.setStyleSheet(f"color: {display_color}; font-size: 13px;")
         row.addWidget(dot)
 
-        name_label = QLabel(name)
+        name_label = ElidedLabel(name)
         name_label.setProperty("class", "historyManageModeName")
-        row.addWidget(name_label)
-        row.addStretch()
+        row.addWidget(name_label, 1)
 
         duration_label = QLabel(format_duration(seconds))
         duration_label.setProperty("class", "historyManageModeDuration")
@@ -692,25 +737,31 @@ class HistoryPage(QWidget):
         return f"{start_at.strftime('%Y/%m/%d %H:%M')} — {end_minute.strftime('%Y/%m/%d %H:%M')}"
 
     def _add_summary_row(self, parent_layout, summary: dict, total: int):
+        total_lbl = QLabel(f"累计投入  {format_duration(total)}")
+        total_lbl.setObjectName("summaryTotalLabel")
+        total_lbl.setFixedHeight(48)
+        parent_layout.addWidget(total_lbl)
         if not summary:
-            lbl = QLabel("暂无记录")
+            lbl = QLabel("这段时间还没有记录。回到专注页，开始积累你的时间。")
             lbl.setProperty("class", "emptyState")
-            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setWordWrap(True)
             parent_layout.addWidget(lbl)
             return
 
-        total_lbl = QLabel(f"总计: {format_duration(total)}")
-        total_lbl.setObjectName("summaryTotalLabel")
-        total_lbl.setAlignment(Qt.AlignCenter)
-        parent_layout.addWidget(total_lbl)
-
-        row = QHBoxLayout()
-        row.setAlignment(Qt.AlignCenter)
-        row.setSpacing(20)
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setAlignment(Qt.AlignLeft)
+        row.setSizeConstraint(QLayout.SetMinimumSize)
+        row.setSpacing(18)
         for name, data in summary.items():
             item_lbl = QLabel(f"● {name}: {format_duration(data['seconds'])}")
-            item_lbl.setStyleSheet(f"color: {readable_color(data['color'])}; font-size: 13px; font-weight: 700; padding: 4px 2px;")
+            item_lbl.setStyleSheet(f"color: {mode_display_color(data['color'], theme_colors()['window'])}; font-size: 12px; padding: 4px 2px;")
             row.addWidget(item_lbl)
-        container = QWidget()
-        container.setLayout(row)
-        parent_layout.addWidget(container)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFixedHeight(44)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(container)
+        parent_layout.addWidget(scroll)

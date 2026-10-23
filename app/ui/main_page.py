@@ -1,6 +1,7 @@
 """主页面 - 计时器"""
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSizePolicy,
+    QScrollArea, QProgressBar, QLayout,
 )
 from PySide6.QtCore import Signal, Qt, QTimer, Slot
 from datetime import date
@@ -16,7 +17,10 @@ from app.database import (
     start_record,
     stop_record,
 )
-from app.ui.colors import foreground_for, mix_color, readable_color
+from app.ui.colors import mix_color, readable_color
+from app.ui.components import ElidedLabel, icon, page_header, scroll_page
+from app.ui.theme import current_theme, theme_colors, mode_display_color
+from app.ui.materials import FrostedSurface
 
 def format_time(seconds: int) -> str:
     h = seconds // 3600
@@ -35,6 +39,8 @@ def format_duration(seconds: int) -> str:
 
 class MainPage(QWidget):
     break_reminder_requested = Signal(str, int, str)
+    history_requested = Signal()
+    settings_requested = Signal()
 
     def __init__(self):
         super().__init__()
@@ -66,88 +72,175 @@ class MainPage(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(24)
+        layout.setContentsMargins(32, 28, 32, 20)
+        self.date_label = QLabel()
+        self.date_label.setObjectName("dateBadge")
+        layout.addWidget(page_header("专注计时", "一次只做一件事，让每一份投入都有迹可循。", self.date_label))
 
-        timer_card = QFrame()
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(24)
+        layout.addWidget(scroll_page(body), 1)
+
+        timer_card = FrostedSurface()
+        self._timer_card = timer_card
         timer_card.setObjectName("timerCard")
         timer_layout = QVBoxLayout(timer_card)
-        timer_layout.setSpacing(14)
-        timer_layout.setContentsMargins(22, 22, 22, 22)
+        timer_layout.setSpacing(0)
+        timer_layout.setContentsMargins(28, 22, 28, 24)
+        top = QHBoxLayout()
+        self.state_chip = QLabel("●  准备就绪")
+        self.state_chip.setObjectName("stateChip")
+        top.addWidget(self.state_chip, alignment=Qt.AlignLeft)
+        top.addStretch()
+        caption = QLabel("今日模式累计")
+        caption.setProperty("class", "mutedLabel")
+        top.addWidget(caption)
+        timer_layout.addLayout(top)
+        timer_layout.addSpacing(24)
 
-        title = QLabel("当前计时")
-        title.setProperty("class", "sectionTitle")
-        title.setAlignment(Qt.AlignCenter)
-        timer_layout.addWidget(title)
-
-        # 当前模式标签
-        self.mode_label = QLabel("选择模式开始计时")
+        self.mode_label = ElidedLabel("准备好，进入心流")
         self.mode_label.setObjectName("modeLabel")
         self.mode_label.setAlignment(Qt.AlignCenter)
         timer_layout.addWidget(self.mode_label)
+        timer_layout.addSpacing(8)
 
-        # 计时器显示
         self.timer_label = QLabel("00:00:00")
         self.timer_label.setObjectName("timerLabel")
         self.timer_label.setAlignment(Qt.AlignCenter)
+        self.timer_label.setAccessibleName("当前模式今日累计时间")
         timer_layout.addWidget(self.timer_label)
+        timer_layout.addSpacing(5)
 
-        # 状态标签
-        self.status_label = QLabel("就绪")
+        self.status_label = QLabel("选择一个模式，开启这一段专注")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setAlignment(Qt.AlignCenter)
         timer_layout.addWidget(self.status_label)
+        timer_layout.addSpacing(28)
 
-        self.reminder_hint_label = QLabel("")
-        self.reminder_hint_label.setObjectName("reminderHintLabel")
-        self.reminder_hint_label.setAlignment(Qt.AlignCenter)
-        timer_layout.addWidget(self.reminder_hint_label)
+        mode_header = QHBoxLayout()
+        mode_caption = QLabel("专注模式")
+        mode_caption.setProperty("class", "mutedLabel")
+        mode_header.addWidget(mode_caption)
+        mode_header.addStretch()
+        manage = QPushButton("管理模式")
+        manage.setObjectName("textButton")
+        manage.setCursor(Qt.PointingHandCursor)
+        manage.clicked.connect(self.settings_requested.emit)
+        mode_header.addWidget(manage)
+        timer_layout.addLayout(mode_header)
+        timer_layout.addSpacing(8)
 
-        # 模式按钮区域
-        self.modes_layout = QHBoxLayout()
-        self.modes_layout.setSpacing(10)
-        self.modes_layout.setAlignment(Qt.AlignCenter)
-        timer_layout.addLayout(self.modes_layout)
+        mode_container = QWidget()
+        self.modes_layout = QHBoxLayout(mode_container)
+        self.modes_layout.setContentsMargins(0, 0, 0, 0)
+        self.modes_layout.setSpacing(8)
+        self.modes_layout.setAlignment(Qt.AlignLeft)
+        self.modes_layout.setSizeConstraint(QLayout.SetMinimumSize)
+        mode_scroll = QScrollArea()
+        mode_scroll.setObjectName("modeScroll")
+        mode_scroll.setWidgetResizable(True)
+        mode_scroll.setFrameShape(QFrame.NoFrame)
+        mode_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        mode_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        mode_scroll.setFixedHeight(58)
+        mode_scroll.setWidget(mode_container)
+        timer_layout.addWidget(mode_scroll)
+        timer_layout.addSpacing(14)
 
-        # 控制按钮
         ctrl_layout = QHBoxLayout()
         ctrl_layout.setSpacing(10)
-        ctrl_layout.setAlignment(Qt.AlignCenter)
+        self.start_btn = QPushButton("开始专注")
+        self.start_btn.setObjectName("primaryButton")
+        self.start_btn.setIcon(icon("play", current_theme().colors["on_accent"]))
+        self.start_btn.setMinimumHeight(44)
+        self.start_btn.clicked.connect(self._start_default_mode)
+        ctrl_layout.addWidget(self.start_btn, 1)
 
         self.pause_btn = QPushButton("暂停")
         self.pause_btn.setObjectName("btnPause")
-        self.pause_btn.setFixedWidth(110)
+        self.pause_btn.setIcon(icon("pause", current_theme().colors["on_accent"]))
+        self.pause_btn.setMinimumHeight(44)
         self.pause_btn.clicked.connect(self.toggle_pause)
         self.pause_btn.setEnabled(False)
-        ctrl_layout.addWidget(self.pause_btn)
+        self.pause_btn.hide()
+        ctrl_layout.addWidget(self.pause_btn, 1)
 
-        self.stop_btn = QPushButton("结束")
+        self.stop_btn = QPushButton("结束计时")
         self.stop_btn.setObjectName("btnStop")
-        self.stop_btn.setFixedWidth(110)
+        self.stop_btn.setIcon(icon("stop"))
+        self.stop_btn.setMinimumHeight(44)
         self.stop_btn.clicked.connect(self.stop_timer)
         self.stop_btn.setEnabled(False)
         ctrl_layout.addWidget(self.stop_btn)
 
         timer_layout.addLayout(ctrl_layout)
-        layout.addWidget(timer_card)
+        body_layout.addWidget(timer_card)
+
+        reminder_row = QHBoxLayout()
+        reminder_icon = QLabel()
+        reminder_icon.setPixmap(icon("coffee").pixmap(16, 16))
+        reminder_row.addWidget(reminder_icon)
+        self.reminder_hint_label = QLabel("")
+        self.reminder_hint_label.setObjectName("reminderHintLabel")
+        self.reminder_hint_label.setWordWrap(True)
+        reminder_row.addWidget(self.reminder_hint_label, 1)
+        body_layout.addLayout(reminder_row)
 
         summary_card = QFrame()
         summary_card.setObjectName("summaryCard")
         summary_card_layout = QVBoxLayout(summary_card)
-        summary_card_layout.setSpacing(10)
-        summary_card_layout.setContentsMargins(18, 18, 18, 18)
-
-        # 今日统计
-        sep = QLabel("今日统计")
-        sep.setProperty("class", "sectionTitle")
-        summary_card_layout.addWidget(sep)
+        summary_card_layout.setSpacing(16)
+        summary_card_layout.setContentsMargins(0, 0, 0, 0)
+        summary_top = QHBoxLayout()
+        heading = QLabel("今日概览")
+        heading.setProperty("class", "sectionTitle")
+        summary_top.addWidget(heading)
+        self.summary_total = QLabel("0m")
+        self.summary_total.setObjectName("todayTotal")
+        summary_top.addWidget(self.summary_total)
+        summary_top.addStretch()
+        history_btn = QPushButton("查看统计  →")
+        history_btn.setObjectName("textButton")
+        history_btn.setCursor(Qt.PointingHandCursor)
+        history_btn.clicked.connect(self.history_requested.emit)
+        summary_top.addWidget(history_btn)
+        summary_card_layout.addLayout(summary_top)
 
         self.summary_layout = QVBoxLayout()
-        self.summary_layout.setSpacing(8)
+        self.summary_layout.setSpacing(12)
         summary_card_layout.addLayout(self.summary_layout)
-        layout.addWidget(summary_card)
+        body_layout.addWidget(summary_card)
+        body_layout.addStretch()
+        for btn in (self.start_btn, self.pause_btn, self.stop_btn):
+            btn.setCursor(Qt.PointingHandCursor)
 
-        layout.addStretch()
+    def _start_default_mode(self):
+        modes = get_modes()
+        mode = next((m for m in modes if self._current_mode and m["id"] == self._current_mode["id"]), None)
+        if mode or modes:
+            self._on_mode_click(mode or modes[0])
+        else:
+            self.settings_requested.emit()
+
+    def _update_controls(self):
+        self.start_btn.setVisible(not self._running)
+        self.pause_btn.setVisible(self._running)
+        self.pause_btn.setIcon(icon("play" if self._paused else "pause", current_theme().colors["on_accent"]))
+        self.state_chip.setText("●  已暂停" if self._paused else "●  专注进行中" if self._running else "●  准备就绪")
+        self.state_chip.setProperty("active", self._running and not self._paused)
+        self.state_chip.style().unpolish(self.state_chip)
+        self.state_chip.style().polish(self.state_chip)
+
+    def refresh_theme(self):
+        self.start_btn.setIcon(icon("play", current_theme().colors["on_accent"]))
+        self._update_controls()
+        self.refresh_modes()
+        self.refresh_today_summary()
+        self.stop_btn.setIcon(icon("stop"))
+        self._timer_card.update()
 
     def _load_reminder_settings(self):
         self._reminder_enabled = break_reminder_enabled()
@@ -166,7 +259,7 @@ class MainPage(QWidget):
         if self._reminder_enabled:
             self.reminder_hint_label.setText(
                 f"每 {self._reminder_interval_minutes} 分钟提醒休息 · "
-                f"暂停超过 {self._reminder_grace_minutes} 分钟，下一次提醒从头计算"
+                f"暂停超过 {self._reminder_grace_minutes} 分钟后重新计算提醒"
             )
         else:
             self.reminder_hint_label.setText("休息提醒已关闭，可在设置中重新开启")
@@ -174,6 +267,8 @@ class MainPage(QWidget):
     def refresh_modes(self):
         # 清除旧按钮
         for btn in self._mode_buttons:
+            self.modes_layout.removeWidget(btn)
+            btn.hide()
             btn.deleteLater()
         self._mode_buttons.clear()
 
@@ -183,37 +278,46 @@ class MainPage(QWidget):
             btn = QPushButton(mode["name"])
             btn.setProperty("class", "modeBtn")
             btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(mode["name"] + " · 点击开始此模式")
+            btn.setMaximumWidth(200)
+            btn.setText(btn.fontMetrics().elidedText(mode["name"], Qt.ElideRight, 160))
             color = mode["color"]
-            display_color = readable_color(color)
-            bg_color = mix_color(color, "#0D1220", 0.74)
-            hover_color = mix_color(color, "#102636", 0.66)
-            border_color = mix_color(display_color, "#0D1220", 0.45)
-            checked_text_color = foreground_for(color)
+            roles = theme_colors()
+            checked_background = mix_color(color, roles["surface"], 0.88)
+            display_color = readable_color(color, checked_background)
+            bg_color = roles["surface_alt"]
+            hover_color = roles["hover"]
+            border_color = roles["border"]
             btn.setStyleSheet(
                 f"""
                 QPushButton {{
                     background-color: {bg_color};
-                    color: {display_color};
+                    color: {roles['text']};
                     border: 1px solid {border_color};
-                    border-radius: 17px;
-                    padding: 6px 18px;
+                    border-radius: 7px;
+                    padding: 4px 16px;
                     font-size: 13px;
-                    font-weight: 700;
-                    min-height: 32px;
+                    font-weight: 500;
+                    min-height: 28px;
                 }}
                 QPushButton:hover {{
                     background-color: {hover_color};
                 }}
                 QPushButton:checked {{
-                    background-color: {color};
-                    color: {checked_text_color};
-                    border-color: {color};
+                    background-color: {checked_background};
+                    color: {display_color};
+                    border-color: {mix_color(display_color, roles['surface'], 0.6)};
                 }}
+                QPushButton:focus {{ border-color: {roles['accent']}; }}
                 """
             )
             btn.clicked.connect(lambda checked, m=mode: self._on_mode_click(m))
             self.modes_layout.addWidget(btn)
             self._mode_buttons.append(btn)
+            btn.setChecked(mode["id"] == current_mode_id)
+
+        self.start_btn.setText("开始专注" if modes else "添加第一个模式")
 
         # 设置页修改模式名称/颜色后，正在计时的页面也立即使用最新数据。
         if current_mode_id is not None:
@@ -221,10 +325,14 @@ class MainPage(QWidget):
             if latest_mode is not None:
                 self._current_mode = latest_mode
                 self.mode_label.setText(f"● {latest_mode['name']}")
-                self.mode_label.setStyleSheet(f"color: {readable_color(latest_mode['color'])};")
+                self.mode_label.setToolTip(latest_mode["name"])
+                self.mode_label.setStyleSheet(f"color: {mode_display_color(latest_mode['color'])};")
 
     def _on_mode_click(self, mode: dict):
         if self._running and self._current_mode and self._current_mode["id"] == mode["id"]:
+            for index, candidate in enumerate(get_modes()):
+                if index < len(self._mode_buttons):
+                    self._mode_buttons[index].setChecked(candidate["id"] == mode["id"])
             return
         # 如果正在计时，先停止当前的
         if self._running:
@@ -255,7 +363,8 @@ class MainPage(QWidget):
         self._reminder_pending = False
 
         self.mode_label.setText(f"● {mode['name']}")
-        self.mode_label.setStyleSheet(f"color: {readable_color(mode['color'])};")
+        self.mode_label.setToolTip(mode["name"])
+        self.mode_label.setStyleSheet(f"color: {mode_display_color(mode['color'])};")
         self.timer_label.setText(format_time(self._elapsed))
         self.status_label.setText("计时中...")
         self.pause_btn.setText("暂停")
@@ -269,6 +378,8 @@ class MainPage(QWidget):
                 btn.setChecked(modes[i]["id"] == mode["id"])
 
         self._timer.start()
+        self._update_controls()
+        self.refresh_today_summary()
 
     @Slot()
     def toggle_pause(self):
@@ -307,6 +418,7 @@ class MainPage(QWidget):
             self._pause_started_at = time.monotonic()
             self.pause_btn.setText("继续")
             self.status_label.setText("已暂停")
+        self._update_controls()
 
     @Slot()
     def stop_timer(self):
@@ -318,6 +430,7 @@ class MainPage(QWidget):
         self.pause_btn.setText("暂停")
         self.pause_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
+        self._update_controls()
         self.refresh_today_summary()
 
     def _save_current(self):
@@ -341,6 +454,7 @@ class MainPage(QWidget):
         self.stop_btn.setEnabled(False)
         for btn in self._mode_buttons:
             btn.setChecked(False)
+        self._update_controls()
 
     def _tick(self):
         today = date.today()
@@ -372,6 +486,7 @@ class MainPage(QWidget):
             self._current_record_id = start_record(self._current_mode["id"])
             self._session_elapsed = 0
             self._autosave_counter = 0
+            self.refresh_today_summary()
 
     def _handle_day_change(self, new_date: date):
         """跨天自动切割：保存昨天的记录，开始新一天的记录"""
@@ -402,30 +517,46 @@ class MainPage(QWidget):
                 item.widget().deleteLater()
 
         summary = get_daily_summary(date.today())
+        if self._running and self._current_mode and self._session_elapsed:
+            name = self._current_mode["name"]
+            entry = summary.setdefault(name, {"seconds": 0, "color": self._current_mode["color"]})
+            entry["seconds"] += self._session_elapsed
+        total = sum(item["seconds"] for item in summary.values())
+        self.summary_total.setText(format_duration(total))
+        today = date.today()
+        self.date_label.setText(f"{today.month}月{today.day}日 · " + ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()])
         if not summary:
-            lbl = QLabel("今天还没有记录，选择一个模式开始计时")
+            lbl = QLabel("今天的故事，从第一次专注开始。\n开始计时后，你的投入会在这里慢慢积累。")
             lbl.setProperty("class", "emptyState")
             lbl.setAlignment(Qt.AlignCenter)
             self.summary_layout.addWidget(lbl)
             return
 
         for name, data in summary.items():
-            display_color = readable_color(data["color"])
+            display_color = mode_display_color(data["color"], theme_colors()["window"])
             row = QHBoxLayout()
-            row.setContentsMargins(12, 8, 12, 8)
+            row.setContentsMargins(0, 0, 0, 0)
             dot = QLabel("●")
             dot.setStyleSheet(f"color: {display_color}; font-size: 16px;")
             dot.setFixedWidth(20)
             row.addWidget(dot)
 
-            name_lbl = QLabel(name)
-            name_lbl.setStyleSheet("color: #F8FAFC; font-size: 14px;")
-            row.addWidget(name_lbl)
+            name_lbl = ElidedLabel(name)
+            row.addWidget(name_lbl, 1)
 
-            row.addStretch()
+            bar = QProgressBar()
+            bar.setRange(0, max(1, total))
+            bar.setValue(data["seconds"])
+            bar.setTextVisible(False)
+            bar.setFixedHeight(5)
+            bar.setStyleSheet(f"QProgressBar {{ background: {theme_colors()['track']}; border: none; border-radius: 2px; }} QProgressBar::chunk {{ background: {display_color}; border-radius: 2px; }}")
+            row.addWidget(bar, 2)
+            row.addSpacing(20)
 
             time_lbl = QLabel(format_duration(data["seconds"]))
-            time_lbl.setStyleSheet(f"color: {display_color}; font-size: 14px; font-weight: bold;")
+            time_lbl.setStyleSheet(f"color: {theme_colors()['text']}; font-size: 13px;")
+            time_lbl.setMinimumWidth(70)
+            time_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             row.addWidget(time_lbl)
 
             container = QWidget()

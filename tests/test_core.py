@@ -622,7 +622,8 @@ class TestBreakReminderFeature(unittest.TestCase):
             from app.ui.break_reminder import BreakReminderToast
 
             app = QApplication([])
-            app.setStyleSheet(Path('app/ui/style.qss').read_text(encoding='utf-8'))
+            from main import load_stylesheet
+            app.setStyleSheet(load_stylesheet())
             toast = BreakReminderToast()
             toast.show_reminder('工作', 45, '测试提醒')
             QTimer.singleShot(900, toast._request_close)

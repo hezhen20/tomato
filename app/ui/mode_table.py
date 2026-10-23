@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate,
     QTableView,
 )
+from app.ui.theme import current_theme, theme_colors
 
 
 class ModeTableModel(QAbstractTableModel):
@@ -122,7 +123,7 @@ class ModeTableDelegate(QStyledItemDelegate):
         rect = option.rect.adjusted(10, 8, -10, -8)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor("#2A3650"), 1))
+        painter.setPen(QPen(QColor(theme_colors()["border_strong"]), 1))
         painter.setBrush(color)
         painter.drawRoundedRect(rect, 8, 8)
         painter.restore()
@@ -139,8 +140,9 @@ class ModeTableDelegate(QStyledItemDelegate):
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
-        self._draw_button(painter, edit_rect, self.ACTION_EDIT, "#102636", "#7DF9FF")
-        self._draw_button(painter, delete_rect, self.ACTION_DELETE, "#2A1020", "#FF8FB0")
+        colors = current_theme().colors
+        self._draw_button(painter, edit_rect, self.ACTION_EDIT, colors["accent_soft"], colors["accent_text"])
+        self._draw_button(painter, delete_rect, self.ACTION_DELETE, colors["danger_bg"], colors["danger"])
         painter.restore()
 
     @staticmethod

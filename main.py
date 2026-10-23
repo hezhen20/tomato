@@ -1,24 +1,17 @@
 """Tomato Timer - 时间追踪应用"""
 import sys
-from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from app.database import init_db
 from app.single_instance import SingleInstance
 from app.ui.main_window import MainWindow
+from app.ui.components import configure_application
+from app.ui.theme import render_stylesheet, stylesheet_template, theme_manager
 
 
 def load_stylesheet() -> str:
-    # 支持 PyInstaller 打包后的路径
-    if getattr(sys, 'frozen', False):
-        base = Path(sys._MEIPASS)
-    else:
-        base = Path(__file__).parent
-    qss_path = base / "app" / "ui" / "style.qss"
-    if qss_path.exists():
-        return qss_path.read_text(encoding="utf-8")
-    return ""
+    return render_stylesheet(stylesheet_template())
 
 
 def main():
@@ -31,7 +24,8 @@ def main():
         return 0
 
     init_db()
-    app.setStyleSheet(load_stylesheet())
+    configure_application(app)
+    theme_manager(app)
 
     window = MainWindow()
     single_instance.activation_requested.connect(window.show_and_activate)

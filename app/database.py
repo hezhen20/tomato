@@ -424,6 +424,15 @@ def set_setting(key: str, value: str):
         )
 
 
+def set_settings(values: dict[str, str]):
+    """Save related preferences atomically, including appearance mode and accent."""
+    with _conn() as conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            values.items(),
+        )
+
+
 def _setting_int(key: str, default: int, minimum: int, maximum: int) -> int:
     """读取并约束整数设置，避免旧配置或手工修改导致异常。"""
     try:

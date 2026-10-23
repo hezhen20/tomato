@@ -9,9 +9,12 @@ from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from app.database import BREAK_REMINDER_MESSAGE_DEFAULT
+from app.ui.components import ElidedLabel
+from app.ui.materials import FrostedSurface
 
 
 class BreakReminderToast(QWidget):
@@ -34,7 +37,7 @@ class BreakReminderToast(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
+        card = FrostedSurface()
         card.setObjectName("breakReminderCard")
         outer.addWidget(card)
 
@@ -56,8 +59,11 @@ class BreakReminderToast(QWidget):
 
         header.addStretch(1)
 
-        self._mode_chip = QLabel("")
+        self._mode_chip = ElidedLabel("")
         self._mode_chip.setObjectName("reminderModeChip")
+        self._mode_chip.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self._mode_chip.setMinimumWidth(60)
+        self._mode_chip.setMaximumWidth(180)
         self._mode_chip.setAlignment(Qt.AlignCenter)
         header.addWidget(self._mode_chip)
         root.addLayout(header)
@@ -127,6 +133,7 @@ class BreakReminderToast(QWidget):
         self._title.setText("该休息一下了")
         self._minutes.setText(str(interval_minutes))
         self._mode_chip.setText(mode_name.strip() or "工作")
+        self._mode_chip.setToolTip(mode_name.strip() or "工作")
         self._message.setText(message.strip() or BREAK_REMINDER_MESSAGE_DEFAULT)
         self._meta.setText(f"连续投入 {interval_minutes} 分钟 · 现在起来活动一下")
 

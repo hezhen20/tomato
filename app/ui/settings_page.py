@@ -1,10 +1,12 @@
 """设置页面 - 快捷键配置 + 模式管理 + 修改密码"""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent, QSize
 from PySide6.QtGui import QColor, QKeyEvent
 from PySide6.QtWidgets import (
     QColorDialog,
+    QButtonGroup,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -39,6 +41,8 @@ from app.database import (
 from app.hotkeys import MODE_ACTION_PREFIX, mode_action_name
 from app.ui.colors import color_swatch_style
 from app.ui.mode_table import ModeTableView
+from app.ui.components import icon, page_header, scroll_page, ElidedLabel, swatch_icon, set_feedback
+from app.ui.theme import THEME_PRESETS, current_theme, current_mode, theme_manager, theme_colors
 
 _KEY_NAMES = {
     Qt.Key_Control: "Ctrl",
@@ -66,7 +70,8 @@ class HotkeyRecorder(QPushButton):
         self._hotkey_display = initial_text
         self._held_modifiers = set()
         self.setMinimumWidth(160)
-        self.setStyleSheet(self._normal_style())
+        self.setObjectName("hotkeyRecorder")
+        self.setCursor(Qt.PointingHandCursor)
         self.clicked.connect(self._start_recording)
 
     def get_hotkey_display(self) -> str:
@@ -77,31 +82,29 @@ class HotkeyRecorder(QPushButton):
         if not self._recording:
             self.setText(text or "点击设置快捷键")
 
-    def _normal_style(self):
-        return (
-            "background-color: #0A0F1C; color: #F8FAFC; "
-            "border: 1px solid #243047; border-radius: 9px; "
-            "text-align: center; padding: 7px 12px;"
-        )
-
-    def _recording_style(self):
-        return (
-            "background-color: #102A24; color: #00F5A0; "
-            "border: 2px solid #00F5A0; border-radius: 9px; "
-            "text-align: center; padding: 7px 12px;"
-        )
+    def _refresh_recording_style(self):
+        self.setProperty("recording", self._recording)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def _start_recording(self):
         self._recording = True
         self._held_modifiers.clear()
         self.setText("请按下快捷键...")
-        self.setStyleSheet(self._recording_style())
+        self._refresh_recording_style()
         self.grabKeyboard()
 
     def _stop_recording(self):
         self._recording = False
-        self.setStyleSheet(self._normal_style())
+        self._refresh_recording_style()
         self.releaseKeyboard()
+
+    def event(self, event):
+        # Recording takes precedence over the window's Alt+1/2/3 navigation.
+        if event.type() == QEvent.ShortcutOverride and self._recording:
+            event.accept()
+            return True
+        return super().event(event)
 
     def keyPressEvent(self, event: QKeyEvent):
         if not self._recording:
@@ -203,29 +206,164 @@ class SettingsPage(QWidget):
         self._editing_mode_id = None
         self._editing_mode_name = ""
         self._editing_color = "#FF9800"
+        self._theme_manager = theme_manager()
         self._setup_ui()
+        self._theme_manager.theme_changed.connect(self._sync_theme_selection)
 
     def _setup_ui(self):
         self._hotkey_manager.sync_mode_hotkeys()
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(14)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        layout.setContentsMargins(32, 28, 32, 24)
+        layout.addWidget(page_header("偏好设置", "让工具适应你，找到自己的工作节奏。"))
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_modes_tab(), "模式管理")
-        tabs.addTab(self._build_hotkeys_tab(), "快捷键")
-        tabs.addTab(self._build_reminder_tab(), "休息提醒")
-        tabs.addTab(self._build_floating_tab(), "悬浮窗")
-        tabs.addTab(self._build_password_tab(), "修改密码")
+        self._tabs = tabs
+        for page, title in [
+            (self._build_modes_tab(), "模式管理"),
+            (self._build_hotkeys_tab(), "快捷键"),
+            (self._build_reminder_tab(), "休息提醒"),
+            (self._build_floating_tab(), "悬浮窗"),
+            (self._build_password_tab(), "账户安全"),
+            (self._build_appearance_tab(), "外观"),
+        ]:
+            page.layout().setContentsMargins(0, 24, 4, 0)
+            tabs.addTab(scroll_page(page), title)
         tabs.tabBar().setExpanding(False)
         tabs.tabBar().setElideMode(Qt.ElideNone)
         layout.addWidget(tabs)
+        for btn in self.findChildren(QPushButton):
+            btn.setCursor(Qt.PointingHandCursor)
+
+    @staticmethod
+    def _section_intro(layout, title, description):
+        heading = QLabel(title)
+        heading.setProperty("class", "settingsTitle")
+        layout.addWidget(heading)
+        hint = QLabel(description)
+        hint.setProperty("class", "mutedLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addSpacing(12)
+
+    def _build_appearance_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(14)
+        self._section_intro(layout, "换一种颜色，找到喜欢的感觉", "选择后立即应用并自动保存，下次打开时依然是你的配色。")
+
+        mode_title = QLabel("界面明暗")
+        mode_title.setObjectName("appearanceSectionTitle")
+        layout.addWidget(mode_title)
+        modes = QHBoxLayout()
+        modes.setSpacing(12)
+        self.appearance_mode_buttons = {}
+        self._appearance_mode_group = QButtonGroup(self)
+        for mode, label, symbol in [("light", "浅色 · 清透", "sun"), ("dark", "深色 · 静谧", "moon")]:
+            button = QPushButton(label)
+            button.setProperty("class", "appearanceMode")
+            button.setCheckable(True)
+            button.setIcon(icon(symbol))
+            button.setAccessibleName(label)
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(lambda checked, value=mode: self._choose_appearance_mode(value))
+            self._appearance_mode_group.addButton(button)
+            self.appearance_mode_buttons[mode] = button
+            modes.addWidget(button, 1)
+        layout.addLayout(modes)
+        layout.addSpacing(8)
+
+        color_title = QLabel("强调色")
+        color_title.setObjectName("appearanceSectionTitle")
+        layout.addWidget(color_title)
+
+        hint = QLabel("主题色用于按钮、导航、图表和提醒。你创建的模式颜色会继续保留。")
+        hint.setProperty("class", "mutedLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addSpacing(4)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(12)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        self.theme_buttons = {}
+        self._theme_button_group = QButtonGroup(self)
+        self._theme_button_group.setExclusive(True)
+        for index, preset in enumerate(THEME_PRESETS):
+            button = QPushButton(preset.name)
+            button.setProperty("class", "themeChoice")
+            button.setCheckable(True)
+            button.setIcon(swatch_icon(preset.accent))
+            button.setIconSize(QSize(28, 28))
+            button.setCursor(Qt.PointingHandCursor)
+            button.setAccessibleName(f"主题色：{preset.name}")
+            button.setToolTip(f"{preset.source_name}\n{preset.accent}")
+            button.clicked.connect(lambda checked, theme_id=preset.id: self._choose_theme(theme_id))
+            self._theme_button_group.addButton(button)
+            self.theme_buttons[preset.id] = button
+            grid.addWidget(button, index // 2, index % 2)
+        layout.addLayout(grid)
+
+        self.theme_save_status = QLabel()
+        self.theme_save_status.setObjectName("themeSaveStatus")
+        self.theme_save_status.setWordWrap(True)
+        layout.addWidget(self.theme_save_status)
+        self.theme_source = QLabel()
+        self.theme_source.setObjectName("themeSource")
+        self.theme_source.setWordWrap(True)
+        self.theme_source.setOpenExternalLinks(True)
+        layout.addWidget(self.theme_source)
+
+        note = QLabel("配色参考 Catppuccin、Dracula 和 Nord；磨砂层次参考 WinUI 的 Acrylic 材质。")
+        note.setProperty("class", "mutedLabel")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch()
+        self._sync_theme_selection(current_theme().id)
+        return widget
+
+    def _choose_theme(self, theme_id):
+        try:
+            self._theme_manager.apply(theme_id)
+        except Exception as exc:
+            self._sync_theme_selection(current_theme().id)
+            QMessageBox.warning(self, "主题色未保存", f"保存失败，请重试：{exc}")
+
+    def _choose_appearance_mode(self, mode):
+        try:
+            self._theme_manager.set_mode(mode)
+        except Exception as exc:
+            self._sync_theme_selection(current_theme().id)
+            QMessageBox.warning(self, "外观未保存", f"保存失败，请重试：{exc}")
+
+    def _sync_theme_selection(self, theme_id):
+        if not hasattr(self, "theme_buttons"):
+            return
+        self.theme_buttons[theme_id].setChecked(True)
+        self.appearance_mode_buttons[current_mode()].setChecked(True)
+        preset = current_theme()
+        mode_name = "浅色" if current_mode() == "light" else "深色"
+        self.theme_save_status.setText(f"当前外观：{mode_name} · {preset.name} · 自动保存")
+        for value, button in self.appearance_mode_buttons.items():
+            button.setIcon(icon("sun" if value == "light" else "moon", theme_colors()["accent_text"] if value == current_mode() else theme_colors()["muted"]))
+        for choice in THEME_PRESETS:
+            self.theme_buttons[choice.id].setIcon(swatch_icon(choice.colors["accent"]))
+        if preset.source_url:
+            link_color = preset.colors["accent_text"]
+            self.theme_source.setText(f'配色来源：<a style="color:{link_color}" href="{preset.source_url}">{preset.source_name}</a>')
+        else:
+            self.theme_source.setText("配色来源：Tomato 原有配色")
+        if hasattr(self, "_add_mode_button"):
+            self._add_mode_button.setIcon(icon("plus", preset.colors["on_accent"]))
 
     def _build_modes_tab(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
+        self._section_intro(layout, "为不同的事情，留出专属时间", "自定义工作、学习或生活模式。颜色将用于计时和统计中的模式识别。")
 
         add_layout = QHBoxLayout()
         self.new_mode_input = QLineEdit()
@@ -236,12 +374,16 @@ class SettingsPage(QWidget):
         self.color_btn = QPushButton()
         self.color_btn.setProperty("class", "colorBtn")
         self.color_btn.setFixedSize(32, 32)
+        self.color_btn.setAccessibleName("新模式颜色")
+        self.color_btn.setToolTip("选择新模式颜色")
         self.color_btn.setStyleSheet(color_swatch_style(self._new_color))
         self.color_btn.clicked.connect(self._pick_color)
         add_layout.addWidget(self.color_btn)
 
         add_btn = QPushButton("添加")
         add_btn.setObjectName("primaryButton")
+        add_btn.setIcon(icon("plus", current_theme().colors["on_accent"]))
+        self._add_mode_button = add_btn
         add_btn.clicked.connect(self._add_mode)
         add_layout.addWidget(add_btn)
         layout.addLayout(add_layout)
@@ -259,19 +401,20 @@ class SettingsPage(QWidget):
         self.edit_color_btn = QPushButton()
         self.edit_color_btn.setProperty("class", "colorBtn")
         self.edit_color_btn.setFixedSize(32, 32)
+        self.edit_color_btn.setAccessibleName("编辑模式颜色")
         self.edit_color_btn.setStyleSheet(color_swatch_style(self._editing_color))
         self.edit_color_btn.clicked.connect(self._pick_edit_color)
         edit_layout.addWidget(self.edit_color_btn)
 
         save_edit_btn = QPushButton("保存")
         save_edit_btn.setObjectName("primaryButton")
-        save_edit_btn.setFixedWidth(54)
+        save_edit_btn.setMinimumWidth(54)
         save_edit_btn.clicked.connect(self._save_mode_edit)
         edit_layout.addWidget(save_edit_btn)
 
         cancel_edit_btn = QPushButton("取消")
         cancel_edit_btn.setObjectName("ghostButton")
-        cancel_edit_btn.setFixedWidth(54)
+        cancel_edit_btn.setMinimumWidth(54)
         cancel_edit_btn.clicked.connect(self._cancel_mode_edit)
         edit_layout.addWidget(cancel_edit_btn)
 
@@ -284,10 +427,12 @@ class SettingsPage(QWidget):
         layout.addWidget(hint)
 
         self.modes_table = ModeTableView()
+        self.modes_table.setMinimumHeight(240)
         self.modes_table.mode_delegate.editRequested.connect(self._edit_mode_row)
         self.modes_table.mode_delegate.deleteRequested.connect(self._delete_mode_row)
         self.modes_table.mode_delegate.colorRequested.connect(self._edit_mode_row)
         layout.addWidget(self.modes_table)
+        layout.addStretch()
 
         self._refresh_modes_table()
         return widget
@@ -393,6 +538,8 @@ class SettingsPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
+        self._section_intro(layout, "不用切回窗口，也能掌控时间", "全局快捷键在其他应用中同样有效。点击按键区域，直接录入新的组合键。")
+
         hint = QLabel("点击按钮后直接按下快捷键组合即可录入。\n按 Esc 取消录入。")
         hint.setProperty("class", "mutedLabel")
         hint.setWordWrap(True)
@@ -424,7 +571,7 @@ class SettingsPage(QWidget):
         save_btn = QPushButton("保存快捷键")
         save_btn.setObjectName("primaryButton")
         save_btn.clicked.connect(self._save_hotkeys)
-        layout.addWidget(save_btn)
+        layout.addWidget(save_btn, alignment=Qt.AlignLeft)
 
         layout.addStretch()
         self.refresh_mode_hotkeys()
@@ -435,9 +582,8 @@ class SettingsPage(QWidget):
         row = QHBoxLayout(row_widget)
         row.setContentsMargins(0, 0, 0, 0)
 
-        label = QLabel(label_text)
-        label.setMinimumWidth(120)
-        row.addWidget(label)
+        label = ElidedLabel(label_text)
+        row.addWidget(label, 1)
 
         recorder = HotkeyRecorder(current_text)
         self.hotkey_recorders[action] = recorder
@@ -445,7 +591,7 @@ class SettingsPage(QWidget):
 
         clear_btn = QPushButton("清除")
         clear_btn.setObjectName("ghostButton")
-        clear_btn.setFixedWidth(50)
+        clear_btn.setMinimumWidth(50)
         clear_btn.clicked.connect(lambda _, a=action: self._clear_hotkey(a))
         row.addWidget(clear_btn)
 
@@ -558,6 +704,7 @@ class SettingsPage(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(14)
+        self._section_intro(layout, "保持专注，减少读秒", "关闭主窗口后，悬浮组件会继续呈现当前模式和计时状态。双击即可回到主窗口。")
 
         hint = QLabel("关闭主窗口后会进入悬浮小组件。这里的设置会立即应用，无需重启。")
         hint.setProperty("class", "mutedLabel")
@@ -603,6 +750,7 @@ class SettingsPage(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(14)
+        self._section_intro(layout, "认真投入，也记得休息", "按你的节奏设置提醒。提醒出现时，计时会继续，直到你主动暂停或结束。")
 
         intro = QLabel(
             "把提醒当作轻轻敲肩，而不是强制中断。计时只计算有效工作时间，"
@@ -706,19 +854,16 @@ class SettingsPage(QWidget):
         enabled = self.reminder_enabled_toggle.isChecked()
         message = self.reminder_message_edit.toPlainText().strip()
         if not message:
-            self.reminder_save_status.setStyleSheet("color: #FF5C8A;")
-            self.reminder_save_status.setText("休息文案不能为空")
+            set_feedback(self.reminder_save_status, "休息文案不能为空")
             return
         if len(message) > 200:
-            self.reminder_save_status.setStyleSheet("color: #FF5C8A;")
-            self.reminder_save_status.setText("休息文案不能超过 200 个字符")
+            set_feedback(self.reminder_save_status, "休息文案不能超过 200 个字符")
             return
         set_setting(BREAK_REMINDER_ENABLED_KEY, "1" if enabled else "0")
         set_setting(BREAK_REMINDER_INTERVAL_KEY, str(self.reminder_interval_spin.value()))
         set_setting(BREAK_REMINDER_GRACE_KEY, str(self.reminder_grace_spin.value()))
         set_setting(BREAK_REMINDER_MESSAGE_KEY, message)
-        self.reminder_save_status.setStyleSheet("color: #00F5A0;")
-        self.reminder_save_status.setText("已保存，下一轮计时立即生效")
+        set_feedback(self.reminder_save_status, "已保存，下一轮计时立即生效", success=True)
         self.reminder_settings_changed.emit()
 
     def _set_floating_time_mask_toggle_text(self, enabled: bool):
@@ -733,40 +878,55 @@ class SettingsPage(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
+        self._section_intro(layout, "账户安全", "修改当前本地账户的密码。已有计时记录和偏好设置会继续保留。")
+        panel = QFrame()
+        panel.setObjectName("passwordPanel")
+        panel.setMaximumWidth(400)
+        form = QVBoxLayout(panel)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(10)
+
+        def add_field(label, field):
+            caption = QLabel(label)
+            caption.setProperty("class", "fieldLabel")
+            caption.setBuddy(field)
+            field.setAccessibleName(label)
+            form.addWidget(caption)
+            form.addWidget(field)
+            form.addSpacing(6)
 
         self.old_pw = QLineEdit()
         self.old_pw.setPlaceholderText("当前密码")
         self.old_pw.setEchoMode(QLineEdit.Password)
-        self.old_pw.setFixedWidth(280)
-        layout.addWidget(self.old_pw, alignment=Qt.AlignCenter)
+        add_field("当前密码", self.old_pw)
 
         self.new_pw = QLineEdit()
         self.new_pw.setPlaceholderText("新密码")
         self.new_pw.setEchoMode(QLineEdit.Password)
-        self.new_pw.setFixedWidth(280)
-        layout.addWidget(self.new_pw, alignment=Qt.AlignCenter)
+        add_field("新密码", self.new_pw)
 
         self.new_pw2 = QLineEdit()
         self.new_pw2.setPlaceholderText("确认新密码")
         self.new_pw2.setEchoMode(QLineEdit.Password)
-        self.new_pw2.setFixedWidth(280)
-        layout.addWidget(self.new_pw2, alignment=Qt.AlignCenter)
+        add_field("确认新密码", self.new_pw2)
+        self.new_pw2.returnPressed.connect(self._change_password)
 
         self.pw_msg = QLabel("")
         self.pw_msg.setObjectName("msgLabel")
         self.pw_msg.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.pw_msg)
+        form.addWidget(self.pw_msg)
 
         btn = QPushButton("修改密码")
         btn.setObjectName("primaryButton")
-        btn.setFixedWidth(280)
         btn.clicked.connect(self._change_password)
-        layout.addWidget(btn, alignment=Qt.AlignCenter)
+        form.addWidget(btn, alignment=Qt.AlignLeft)
+        layout.addWidget(panel)
 
         layout.addStretch()
         return widget
 
     def _change_password(self):
+        set_feedback(self.pw_msg, "")
         old = self.old_pw.text().strip()
         new = self.new_pw.text().strip()
         new2 = self.new_pw2.text().strip()
@@ -782,8 +942,7 @@ class SettingsPage(QWidget):
             return
 
         change_password(self._username, new)
-        self.pw_msg.setStyleSheet("color: #00F5A0;")
-        self.pw_msg.setText("密码修改成功")
+        set_feedback(self.pw_msg, "密码修改成功", success=True)
         self.old_pw.clear()
         self.new_pw.clear()
         self.new_pw2.clear()
