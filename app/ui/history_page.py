@@ -378,23 +378,7 @@ class HistoryPage(QWidget):
         total = sum(v["seconds"] for v in merged.values())
         self._add_summary_row(self.week_summary_layout, merged, total)
 
-        # 表格
-        rows = []
-        for day_str in sorted(data.keys()):
-            for name, info in data[day_str].items():
-                rows.append((day_str, name, info["periods"], info["seconds"]))
-        self.week_table.setRowCount(len(rows))
-        for i, (day_str, name, periods, secs) in enumerate(rows):
-            self.week_table.setItem(i, 0, QTableWidgetItem(day_str))
-            self.week_table.setItem(i, 1, QTableWidgetItem(name))
-            detail = self._format_period_detail(periods)
-            detail_item = QTableWidgetItem("查看")
-            detail_item.setToolTip(detail)
-            detail_item.setData(Qt.UserRole, detail)
-            detail_item.setForeground(QColor("#7DF9FF"))
-            detail_item.setTextAlignment(Qt.AlignCenter)
-            self.week_table.setItem(i, 2, detail_item)
-            self.week_table.setItem(i, 3, QTableWidgetItem(format_duration(secs)))
+        self._populate_period_table(self.week_table, data)
 
     # ---- 月视图 ----
     def _nav_month(self, delta):
@@ -430,24 +414,89 @@ class HistoryPage(QWidget):
         total = sum(v["seconds"] for v in merged.values())
         self._add_summary_row(self.month_summary_layout, merged, total)
 
-        rows = []
+        self._populate_period_table(self.month_table, data)
+
+    # ---- 工具方法 ----
+    def _populate_period_table(self, table: QTableWidget, data: dict):
+        """填充周/月明细表，并按日期合并重复日期、显示当天总时长。"""
+        grouped_rows = []
         for day_str in sorted(data.keys()):
-            for name, info in data[day_str].items():
-                rows.append((day_str, name, info["periods"], info["seconds"]))
-        self.month_table.setRowCount(len(rows))
-        for i, (day_str, name, periods, secs) in enumerate(rows):
-            self.month_table.setItem(i, 0, QTableWidgetItem(day_str))
-            self.month_table.setItem(i, 1, QTableWidgetItem(name))
-            detail = self._format_period_detail(periods)
+            mode_rows = [
+                (name, info["periods"], int(info["seconds"] or 0))
+                for name, info in data[day_str].items()
+            ]
+            if len(mode_rows) > 1:
+                day_total = sum(seconds for _, _, seconds in mode_rows)
+                total_periods = {key: 0 for key in PERIOD_KEYS}
+                for _, periods, _ in mode_rows:
+                    for key in PERIOD_KEYS:
+                        total_periods[key] += int(periods.get(key, 0) or 0)
+                grouped_rows.append({
+                    "day": day_str,
+                    "name": "总计",
+                    "periods": total_periods,
+                    "seconds": day_total,
+                    "is_total": True,
+                    "row_span": len(mode_rows) + 1,
+                })
+                grouped_rows.extend(
+                    {
+                        "day": None,
+                        "name": name,
+                        "periods": periods,
+                        "seconds": seconds,
+                        "is_total": False,
+                        "row_span": 1,
+                    }
+                    for name, periods, seconds in mode_rows
+                )
+            else:
+                name, periods, seconds = mode_rows[0]
+                grouped_rows.append({
+                    "day": day_str,
+                    "name": name,
+                    "periods": periods,
+                    "seconds": seconds,
+                    "is_total": False,
+                    "row_span": 1,
+                })
+
+        table.clearSpans()
+        table.clearContents()
+        table.setRowCount(len(grouped_rows))
+        row_index = 0
+        for row in grouped_rows:
+            if row["day"]:
+                day_item = QTableWidgetItem(row["day"])
+                day_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row_index, 0, day_item)
+
+            name_item = QTableWidgetItem(row["name"])
+            if row["is_total"]:
+                name_item.setFont(QFont(name_item.font().family(), name_item.font().pointSize(), QFont.Bold))
+            table.setItem(row_index, 1, name_item)
+
+            detail = self._format_period_detail(row["periods"])
             detail_item = QTableWidgetItem("查看")
             detail_item.setToolTip(detail)
             detail_item.setData(Qt.UserRole, detail)
             detail_item.setForeground(QColor("#7DF9FF"))
             detail_item.setTextAlignment(Qt.AlignCenter)
-            self.month_table.setItem(i, 2, detail_item)
-            self.month_table.setItem(i, 3, QTableWidgetItem(format_duration(secs)))
+            if row["is_total"]:
+                detail_font = detail_item.font()
+                detail_font.setBold(True)
+                detail_item.setFont(detail_font)
+            table.setItem(row_index, 2, detail_item)
 
-    # ---- 工具方法 ----
+            duration_item = QTableWidgetItem(format_duration(row["seconds"]))
+            if row["is_total"]:
+                duration_item.setFont(QFont(duration_item.font().family(), duration_item.font().pointSize(), QFont.Bold))
+            table.setItem(row_index, 3, duration_item)
+
+            if row["row_span"] > 1:
+                table.setSpan(row_index, 0, row["row_span"], 1)
+            row_index += 1
+
     def _clear_layout(self, layout):
         while layout.count():
             item = layout.takeAt(0)
