@@ -1,12 +1,13 @@
 """Shared desktop UI primitives. No external assets or network access required."""
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, Qt, QRectF, QSize
+from PySide6.QtCore import QByteArray, QEvent, QEasingCurve, Qt, QRectF, QSize, QVariantAnimation
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QToolTip, QVBoxLayout, QWidget,
 )
+from app.ui.colors import mix_color
 from app.ui.theme import application_palette, current_theme, theme_colors
 
 # Lucide icons, MIT license: https://github.com/lucide-icons/lucide
@@ -148,44 +149,170 @@ class ActivityChart(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._days = []
+        self._dates = []
+        self._hover_index = -1
+        self._hover_levels = []
+        self._hover_from = []
+        self._reveal = 1.0
+        self._hover_animation = QVariantAnimation(self)
+        self._hover_animation.setDuration(160)
+        self._hover_animation.setStartValue(0.0)
+        self._hover_animation.setEndValue(1.0)
+        self._hover_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._hover_animation.valueChanged.connect(self._animate_hover)
+        self._reveal_animation = QVariantAnimation(self)
+        self._reveal_animation.setDuration(360)
+        self._reveal_animation.setStartValue(0.0)
+        self._reveal_animation.setEndValue(1.0)
+        self._reveal_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self._reveal_animation.valueChanged.connect(self._animate_reveal)
         self.setMinimumHeight(132)
         self.setMaximumHeight(160)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setMouseTracking(True)
         self.setAccessibleName("每日累计时长柱状图")
 
-    def set_days(self, days):
-        self._days = list(days)
+    def set_days(self, days, *, dates=None):
+        days = list(days)
+        dates = list(dates) if dates is not None else [None] * len(days)
+        if len(dates) != len(days):
+            raise ValueError("Each chart day must have a matching date")
+        if days == self._days and dates == self._dates:
+            return
+        self._reset_hover()
+        self._days, self._dates = days, dates
+        self._hover_levels = [0.0] * len(days)
         self.setAccessibleDescription("；".join(
-            f"{label}，{seconds // 3600}小时{(seconds % 3600) // 60}分钟"
-            for label, seconds in self._days
+            self._detail_text(i).replace("\n", "，") for i in range(len(days))
         ))
+        if self.isVisible():
+            self._start_reveal()
         self.update()
+
+    def _plot_area(self):
+        return QRectF(self.rect().adjusted(8, 20, -8, -28))
+
+    def _index_at(self, position):
+        area = self._plot_area()
+        if not self._days or area.width() <= 0 or not area.contains(position):
+            return -1
+        return min(len(self._days) - 1, int((position.x() - area.left()) / area.width() * len(self._days)))
+
+    def _detail_text(self, index):
+        label, total = self._days[index]
+        day = self._dates[index]
+        if day is not None:
+            weekday = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")[day.weekday()]
+            label = f"{day.isoformat()}（{weekday}）"
+        hours, remainder = divmod(total, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        duration = f"{hours}小时 {minutes}分钟" if hours else f"{minutes}分钟"
+        if seconds:
+            duration += f" {seconds}秒"
+        return f"{label}\n累计投入：{duration}"
+
+    def _set_hovered(self, index):
+        if index == self._hover_index:
+            return
+        self._hover_animation.stop()
+        self._hover_from = self._hover_levels[:]
+        self._hover_index = index
+        self._hover_animation.start()
+
+    def _animate_hover(self, progress):
+        self._hover_levels = [
+            start + (float(i == self._hover_index) - start) * progress
+            for i, start in enumerate(self._hover_from)
+        ]
+        self.update()
+
+    def _reset_hover(self):
+        if self._hover_index >= 0:
+            QToolTip.hideText()
+        self._hover_animation.stop()
+        self._hover_index = -1
+        self._hover_from = []
+        self._hover_levels = [0.0] * len(self._days)
+
+    def _start_reveal(self):
+        self._reveal_animation.stop()
+        self._reveal = 0.0
+        self._reveal_animation.start()
+
+    def _animate_reveal(self, progress):
+        self._reveal = progress
+        self.update()
+
+    def _show_detail(self, index, global_position):
+        area = self._plot_area()
+        step = area.width() / len(self._days)
+        column = QRectF(area.left() + step * index, area.top(), step, area.height())
+        QToolTip.showText(global_position, self._detail_text(index), self, column.toAlignedRect())
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         if not self._days:
             return
-        area = self.rect().adjusted(8, 20, -8, -28)
-        maximum = max(3600, max(value for _, value in self._days))
+        area = self._plot_area()
+        peak = max(value for _, value in self._days)
+        maximum = max(3600, peak)
         step = area.width() / len(self._days)
+        colors = theme_colors()
         for i, (label, seconds) in enumerate(self._days):
-            x = area.left() + step * i + step * .22
-            width = max(3, step * .56)
-            height = max(3, area.height() * seconds / maximum)
+            hover = self._hover_levels[i]
+            width = max(3, step * (.56 + .10 * hover))
+            x = area.left() + step * (i + .5) - width / 2
+            height = max(3, area.height() * seconds / maximum * self._reveal)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(theme_colors()["chart"] if seconds else theme_colors()["track"]))
+            if hover > 0:
+                highlight = QColor(colors["chart"])
+                highlight.setAlphaF(.08 * hover)
+                painter.setBrush(highlight)
+                painter.drawRoundedRect(QRectF(area.left() + step * i, area.top(), step, area.height()), 5, 5)
+            base = colors["chart"] if seconds else colors["track"]
+            painter.setBrush(QColor(mix_color(base, colors["title"], .18 * hover)))
             painter.drawRoundedRect(QRectF(x, area.bottom() - height, width, height), 3, 3)
             if len(self._days) <= 7 or i % 5 == 0 or i == len(self._days) - 1:
-                painter.setPen(QColor(theme_colors()["muted"]))
-                painter.drawText(QRectF(x - step * .22, area.bottom() + 10, step, 20), Qt.AlignCenter, label)
-        painter.setPen(QColor(theme_colors()["muted"]))
-        painter.drawText(8, 13, f"每日投入 · 最高 {maximum // 3600}h {(maximum % 3600) // 60}m")
+                painter.setPen(QColor(colors["muted"]))
+                painter.drawText(QRectF(area.left() + step * i, area.bottom() + 10, step, 20), Qt.AlignCenter, label)
+        painter.setPen(QColor(colors["muted"]))
+        painter.drawText(8, 13, f"每日投入 · 最高 {peak // 3600}h {(peak % 3600) // 60}m")
 
     def mouseMoveEvent(self, event):
-        if self._days:
-            index = min(len(self._days) - 1, max(0, int((event.position().x() - 8) / max(1, self.width() - 16) * len(self._days))))
-            label, seconds = self._days[index]
-            self.setToolTip(f"{label} · {seconds // 3600}h {(seconds % 3600) // 60}m")
+        index = self._index_at(event.position())
+        self._set_hovered(index)
+        if index >= 0:
+            self._show_detail(index, event.globalPosition().toPoint())
+        else:
+            QToolTip.hideText()
         super().mouseMoveEvent(event)
+
+    def event(self, event):
+        if event.type() == QEvent.ToolTip:
+            index = self._index_at(event.pos())
+            self._set_hovered(index)
+            if index >= 0:
+                self._show_detail(index, event.globalPos())
+                event.accept()
+            else:
+                QToolTip.hideText()
+                event.ignore()
+            return True
+        return super().event(event)
+
+    def leaveEvent(self, event):
+        self._set_hovered(-1)
+        QToolTip.hideText()
+        super().leaveEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._days:
+            self._start_reveal()
+
+    def hideEvent(self, event):
+        self._reset_hover()
+        self._reveal_animation.stop()
+        self._reveal = 1.0
+        super().hideEvent(event)

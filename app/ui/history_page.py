@@ -415,7 +415,7 @@ class HistoryPage(QWidget):
         self.week_chart.set_days([
             (WEEKDAYS[i], sum(info["seconds"] for info in data.get((monday + timedelta(days=i)).isoformat(), {}).values()))
             for i in range(7)
-        ])
+        ], dates=[monday + timedelta(days=i) for i in range(7)])
 
     # ---- 月视图 ----
     def _nav_month(self, delta):
@@ -455,7 +455,7 @@ class HistoryPage(QWidget):
         self.month_chart.set_days([
             (str(day), sum(info["seconds"] for info in data.get(date(y, m, day).isoformat(), {}).values()))
             for day in range(1, last_day.day + 1)
-        ])
+        ], dates=[date(y, m, day) for day in range(1, last_day.day + 1)])
 
     # ---- 工具方法 ----
     def _populate_period_table(self, table: QTableWidget, data: dict):
