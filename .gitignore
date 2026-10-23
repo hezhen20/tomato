@@ -44,3 +44,8 @@ desktop.ini
 # Logs
 *.log
 logs/
+
+docs/
+
+# Local scoring rubric
+JOB_SEARCH_EFFORT_LEVELS.md

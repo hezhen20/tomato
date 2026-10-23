@@ -4,11 +4,21 @@
 
 > 当前主要面向 Windows 桌面使用；macOS / Linux 可运行源码版，但全局快捷键、托盘和打包效果可能因系统权限与桌面环境而异。
 
+## 界面与外观
+
+界面支持深色与浅色模式、七种强调色和可折叠侧栏，支持从 760 × 620 到更大桌面窗口。侧栏、计时面板、登录页和提醒浮层采用 Acrylic 风格的应用内磨砂材质：模糊底色、细纹理与柔和高光共同提供层次，正文和操作控件保持清晰。
+
+设计参考：[Folo](https://github.com/RSSNext/Folo)、[Kanri](https://github.com/kanriapp/kanri) 的桌面产品布局与低干扰信息层级。图标许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+材质层次参考 [微软 WinUI Gallery](https://github.com/microsoft/WinUI-Gallery) 与 [Acrylic 设计说明](https://learn.microsoft.com/windows/apps/design/style/acrylic)，使用 Qt 原生模糊效果并缓存底图；切换主题或窗口重绘时，计时内容保持锐利。
+
 ## 功能特性
 
 - 多模式计时：默认包含“工作”模式，可在设置页新增、编辑、删除模式。
 - 累积统计：同一天内同一模式的多段计时会自动累积。
 - 历史记录：支持按日、周、月查看不同模式的投入时长。
+- 统计明细：同一天的模式合并日期显示，多模式时增加每日总计与分时段明细。
+- 交互图表：周、月柱状图悬浮显示完整日期、星期和累计时长，并提供高亮与生长动效。
 - 全局快捷键：窗口不在前台时也能暂停、结束或切换模式。
 - 悬浮球：最小化后显示当前计时状态，双击可恢复主窗口。
 - 系统托盘：关闭窗口时默认最小化到托盘，退出时自动保存当前计时。
@@ -27,7 +37,7 @@ tomato/
 │       ├── history_page.py  # 历史统计页
 │       ├── settings_page.py # 设置页
 │       ├── floating_ball.py # 悬浮球
-│       └── style.qss        # 深色主题样式
+│       └── style.qss        # 明暗主题与统一控件样式
 ├── tests/                   # 核心逻辑测试
 ├── dev.py                   # 开发热重载入口
 ├── main.py                  # 源码运行入口
@@ -98,13 +108,31 @@ tomato/
 ### 计时
 
 - 点击“开始”后开始记录当前模式时间。
+- 没有已选模式时，“开始专注”会启动第一个模式；也可以直接点击模式按钮开始。
 - 点击“暂停”可暂停或恢复计时。
 - 点击“结束”会保存当前计时段，但不会清空当天累计显示。
 - 切换模式时，应用会先保存当前模式的本段时间，再开始新模式计时。
+- 使用 `Alt + 1 / 2 / 3` 可以切换专注、统计和设置页面；快捷键录入时优先记录组合键。
 
 ### 模式管理
 
 在设置页可以新增模式、修改模式名称和颜色。模式颜色会用于主页、历史统计和悬浮球状态显示。
+
+### 外观主题
+
+在 **偏好设置 → 外观** 中选择“浅色 · 清透”或“深色 · 静谧”，也可以用侧栏底部的太阳/月亮按钮快速切换。强调色与明暗模式独立选择，点击即生效并自动保存，登录页也会恢复上次的选择。首次使用仍默认深色与原版薄荷绿。
+
+| 主题色 | 主色值 | 色板来源 |
+| --- | --- | --- |
+| 明亮蓝 | `#89B4FA` | Catppuccin Mocha · Blue |
+| Dracula 紫 | `#BD93F9` | Dracula · Purple |
+| Nord 冰青 | `#88C0D0` | Nord · Frost / nord8 |
+| 蜜桃橙 | `#FAB387` | Catppuccin Mocha · Peach |
+| 玫瑰粉 | `#F5C2E7` | Catppuccin Mocha · Pink |
+| 清新绿 | `#A6E3A1` | Catppuccin Mocha · Green |
+| 原版薄荷绿 | `#A8D5BA` | Tomato 原有配色 |
+
+参考上游：[Catppuccin 色板](https://github.com/catppuccin/palette/blob/main/palette.json)、[Dracula 色板](https://github.com/dracula/dracula-theme#color-palette-oss)、[Nord 色板](https://github.com/nordtheme/nord/blob/develop/src/nord.styl)。使用上游强调色并适配本项目的明暗模式、悬停、选中、焦点和原生弹窗配色。浅色使用 Latte/Alucard 或相同色相的可读深色版本；模式原始颜色继续保留，显示时自动适配对比度。
 
 ### 快捷键
 
@@ -173,6 +201,8 @@ python -m unittest discover -s tests
 ```
 
 测试会使用临时数据库，不会影响正式计时数据。
+
+界面回归测试还覆盖真实 Qt 按钮操作、登录注册、自动保存防重复累计、模式重命名、记录管理、每日图表数据、窄窗口和长模式名、悬浮窗恢复，以及独立进程中的完整启动与退出。Qt 界面测试使用离屏平台；系统级快捷键注册、系统托盘菜单与多屏拖动仍需要在目标系统上人工验证。
 
 ## 注意事项
 
