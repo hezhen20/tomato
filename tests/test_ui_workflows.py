@@ -268,6 +268,140 @@ class UiWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertIsNone(row["end_time"])
 
+    def test_delete_records_while_paused_rebases_timer_before_resume(self):
+        mode = db.get_modes()[0]
+        today = datetime.combine(date.today(), datetime.min.time())
+        self.insert_record(mode["id"], 3600, today + timedelta(hours=9))
+        self.insert_record(mode["id"], 120, today + timedelta(hours=11))
+        window = self.make_window()
+        page = window._main_page
+        page._timer.setInterval(60_000)
+        page._start_default_mode()
+        for _ in range(7):
+            page._tick()
+        page.toggle_pause()
+        active_id = page._current_record_id
+        window._sync_floating_ball()
+        self.assertEqual(page.timer_label.text(), "01:02:07")
+
+        window._switch_page(2)
+        history = window._history_page
+        history._tabs.setCurrentIndex(3)
+        history.manage_start_edit.setDateTime(QDateTime(today + timedelta(hours=9)))
+        history.manage_end_edit.setDateTime(QDateTime(today + timedelta(hours=10)))
+        from PySide6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "exec", return_value=QMessageBox.Yes):
+            history._confirm_delete_records()
+
+        # The hidden timer and floating display must update as soon as deletion commits.
+        self.assertEqual(page.timer_label.text(), "00:02:07")
+        self.assertEqual(page._elapsed, 127)
+        self.assertEqual(window._floating_ball._time_text, "00:02:07")
+        self.assertEqual(page._session_elapsed, 7)
+        self.assertEqual(page._current_record_id, active_id)
+        self.assertTrue(page._running and page._paused)
+        self.assertFalse(page._timer.isActive())
+        self.assertEqual(page.summary_total.text(), "2m")
+
+        window._switch_page(1)
+        QTest.mouseClick(page.pause_btn, Qt.LeftButton)
+        for _ in range(30):
+            page._tick()
+        self.assertEqual(page.timer_label.text(), "00:02:37")
+        page.stop_timer()
+        self.assertEqual(db.get_daily_summary(date.today())[mode["name"]]["seconds"], 157)
+        self.assertEqual(page.timer_label.text(), "00:02:37")
+
+    def test_delete_autosaved_records_preserves_live_unsaved_seconds(self):
+        mode = db.get_modes()[0]
+        self.insert_record(mode["id"], 3600)
+        window = self.make_window()
+        page = window._main_page
+        page._timer.setInterval(60_000)
+        page._start_default_mode()
+        for _ in range(35):
+            page._tick()
+        active_id = page._current_record_id
+
+        window._switch_page(2)
+        history = window._history_page
+        history._tabs.setCurrentIndex(3)
+        history.manage_end_edit.setDateTime(QDateTime.currentDateTime().addDays(1))
+        from PySide6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "exec", return_value=QMessageBox.Yes):
+            history._confirm_delete_records()
+
+        self.assertEqual(page.timer_label.text(), "00:00:05")
+        self.assertEqual(page._elapsed, 5)
+        self.assertEqual(page._session_elapsed, 5)
+        self.assertEqual(page._current_record_id, active_id)
+        self.assertTrue(page._running and not page._paused)
+        self.assertTrue(page._timer.isActive())
+        with db._conn() as conn:
+            row = conn.execute("SELECT end_time FROM time_record WHERE id=?", (active_id,)).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNone(row["end_time"])
+
+        for _ in range(25):
+            page._tick()
+        self.assertEqual(page.timer_label.text(), "00:00:30")
+        page._tick()
+        page.stop_timer()
+        self.assertEqual(db.get_daily_summary(date.today())[mode["name"]]["seconds"], 31)
+        self.assertEqual(page.timer_label.text(), "00:00:31")
+
+    def test_delete_stopped_records_resets_timer_and_restart_uses_remaining_total(self):
+        mode = db.get_modes()[0]
+        other_id = db.add_mode("阅读", "#99AAEE")
+        today = datetime.combine(date.today(), datetime.min.time())
+        self.insert_record(mode["id"], 3600, today + timedelta(hours=9))
+        self.insert_record(other_id, 120, today + timedelta(hours=11))
+        window = self.make_window()
+        page = window._main_page
+        page._timer.setInterval(60_000)
+        page._start_default_mode()
+        page.stop_timer()
+
+        window._switch_page(2)
+        history = window._history_page
+        history._tabs.setCurrentIndex(3)
+        history.manage_start_edit.setDateTime(QDateTime(today + timedelta(hours=9)))
+        history.manage_end_edit.setDateTime(QDateTime(today + timedelta(hours=10)))
+        from PySide6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "exec", return_value=QMessageBox.Yes):
+            history._confirm_delete_records()
+
+        window._switch_page(1)
+        self.assertEqual(page.timer_label.text(), "00:00:00")
+        self.assertEqual(page._elapsed, 0)
+        self.assertFalse(page._running)
+        self.assertEqual(page.summary_total.text(), "2m")
+        QTest.mouseClick(page.start_btn, Qt.LeftButton)
+        page._tick()
+        page.stop_timer()
+        summary = db.get_daily_summary(date.today())
+        self.assertEqual(summary[mode["name"]]["seconds"], 1)
+        self.assertEqual(summary["阅读"]["seconds"], 120)
+        self.assertEqual(page.timer_label.text(), "00:00:01")
+
+    def test_return_to_timer_reloads_accumulated_time_after_record_changes(self):
+        mode = db.get_modes()[0]
+        self.insert_record(mode["id"], 3600)
+        window = self.make_window()
+        page = window._main_page
+        page._timer.setInterval(60_000)
+        page._start_default_mode()
+        for _ in range(7):
+            page._tick()
+        page.toggle_pause()
+        window._switch_page(2)
+        db.delete_records_in_date_range(date.today(), date.today())
+        window._switch_page(1)
+        self.assertEqual(page.timer_label.text(), "00:00:07")
+        self.assertEqual(page._elapsed, 7)
+        self.assertEqual(page._session_elapsed, 7)
+        self.assertTrue(page._paused)
+
     def test_floating_mask_and_restore_signal(self):
         window = self.make_window()
         window._main_page._start_default_mode()

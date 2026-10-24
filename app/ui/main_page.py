@@ -516,14 +516,21 @@ class MainPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        summary = get_daily_summary(date.today())
-        if self._running and self._current_mode and self._session_elapsed:
+        today = date.today()
+        summary = get_daily_summary(today)
+        if self._running and self._current_mode and self._session_elapsed and self._current_date == today:
             name = self._current_mode["name"]
             entry = summary.setdefault(name, {"seconds": 0, "color": self._current_mode["color"]})
             entry["seconds"] += self._session_elapsed
+
+        # 累计显示与概览共用同一份数据，删除已保存记录后不再沿用旧累计值。
+        # 尚未保存的当前段仅在计时（含暂停）时计入，停止后已落库，不重复累加。
+        if self._current_mode:
+            self._elapsed = summary.get(self._current_mode["name"], {}).get("seconds", 0)
+            self.timer_label.setText(format_time(self._elapsed))
+
         total = sum(item["seconds"] for item in summary.values())
         self.summary_total.setText(format_duration(total))
-        today = date.today()
         self.date_label.setText(f"{today.month}月{today.day}日 · " + ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()])
         if not summary:
             lbl = QLabel("今天的故事，从第一次专注开始。\n开始计时后，你的投入会在这里慢慢积累。")

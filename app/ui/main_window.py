@@ -198,6 +198,8 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._main_page)
 
         self._history_page = HistoryPage()
+        self._history_page.records_changed.connect(self._main_page.refresh_today_summary)
+        self._history_page.records_changed.connect(self._sync_floating_ball)
         self._stack.addWidget(self._history_page)
 
         self._settings_page = SettingsPage(self._hotkey_manager, username)

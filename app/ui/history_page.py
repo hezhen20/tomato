@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTabWidget, QHeaderView, QFrame,
     QToolTip, QSizePolicy, QDateTimeEdit, QCalendarWidget, QMessageBox, QScrollArea, QLayout,
 )
-from PySide6.QtCore import Qt, QDateTime, QTime
+from PySide6.QtCore import Qt, QDateTime, QTime, Signal
 from PySide6.QtGui import QColor, QCursor, QFont
 from datetime import date, datetime, timedelta
 
@@ -53,6 +53,8 @@ WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"
 
 
 class HistoryPage(QWidget):
+    records_changed = Signal()
+
     def __init__(self):
         super().__init__()
         self._current_date = date.today()
@@ -719,7 +721,8 @@ class HistoryPage(QWidget):
         if message_box.exec() != QMessageBox.Yes:
             return
 
-        delete_records_in_datetime_range(start_at, end_exclusive)
+        if delete_records_in_datetime_range(start_at, end_exclusive):
+            self.records_changed.emit()
         self._refresh_manage_records()
         self._refresh_day()
         self._refresh_week()
