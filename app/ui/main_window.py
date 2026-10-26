@@ -193,6 +193,7 @@ class MainWindow(QMainWindow):
         # 创建主要页面
         self._main_page = MainPage()
         self._main_page.history_requested.connect(lambda: self._switch_page(2))
+        self._main_page.task_statistics_requested.connect(self._open_task_statistics)
         self._main_page.settings_requested.connect(self._open_mode_settings)
         self._main_page.break_reminder_requested.connect(self._on_break_reminder_requested)
         self._stack.addWidget(self._main_page)
@@ -200,6 +201,7 @@ class MainWindow(QMainWindow):
         self._history_page = HistoryPage()
         self._history_page.records_changed.connect(self._main_page.refresh_today_summary)
         self._history_page.records_changed.connect(self._sync_floating_ball)
+        self._history_page.records_changed.connect(self._history_page.task_page.refresh)
         self._stack.addWidget(self._history_page)
 
         self._settings_page = SettingsPage(self._hotkey_manager, username)
@@ -231,6 +233,10 @@ class MainWindow(QMainWindow):
     def _open_mode_settings(self):
         self._settings_page._tabs.setCurrentIndex(0)
         self._switch_page(3)
+
+    def _open_task_statistics(self, mode_id):
+        self._switch_page(2)
+        self._history_page.open_task_statistics(mode_id)
 
     @Slot(str)
     def _on_theme_changed(self, _theme_id):
@@ -303,6 +309,7 @@ class MainWindow(QMainWindow):
 
     def _on_modes_changed(self):
         self._main_page.refresh_modes()
+        self._history_page.task_page.refresh()
         self._settings_page.refresh_mode_hotkeys()
         self._hotkey_manager.restart()
 

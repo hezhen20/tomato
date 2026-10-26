@@ -99,6 +99,8 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_time_record_mode_start
+                ON time_record(mode_id, start_time);
         """)
         for i, (name, color) in enumerate(DEFAULT_MODES):
             conn.execute(
@@ -358,8 +360,30 @@ def _normalize_period_seconds(periods: dict) -> dict:
     return normalized
 
 
-def get_range_period_summary(start_date: date, end_date: date) -> dict:
-    """返回日期范围内每天各模式的上午/下午/晚上时长。"""
+def get_mode_date_bounds(mode_id: int):
+    """任务的首末统计日；按实际专注秒数计算，结束边界不重复算一天。"""
+    with _conn() as conn:
+        first = conn.execute(
+            """SELECT start_time FROM time_record
+               WHERE mode_id = ? AND COALESCE(duration_seconds, 0) > 0
+               ORDER BY start_time LIMIT 1""", (mode_id,),
+        ).fetchone()
+        last = conn.execute(
+            """SELECT start_time, duration_seconds FROM time_record
+               WHERE mode_id = ? AND COALESCE(duration_seconds, 0) > 0
+               ORDER BY julianday(start_time) + duration_seconds / 86400.0 DESC
+               LIMIT 1""", (mode_id,),
+        ).fetchone()
+    if first is None:
+        return None
+    first_day = _period_for_datetime(datetime.fromisoformat(first["start_time"]))[0]
+    last_instant = (datetime.fromisoformat(last["start_time"])
+                    + timedelta(seconds=last["duration_seconds"], microseconds=-1))
+    return first_day, _period_for_datetime(last_instant)[0]
+
+
+def get_range_period_summary(start_date: date, end_date: date, mode_id: int | None = None) -> dict:
+    """返回每天各模式的分时段时长；可按稳定的任务 ID 筛选，重命名不影响记录。"""
     if end_date < start_date:
         return {}
 
@@ -367,6 +391,10 @@ def get_range_period_summary(start_date: date, end_date: date) -> dict:
     window_end = datetime.combine(end_date + timedelta(days=1), MORNING_START)
     result = {}
 
+    mode_filter = " AND tr.mode_id = ?" if mode_id is not None else ""
+    params = [window_end.isoformat(), window_start.isoformat()]
+    if mode_id is not None:
+        params.append(mode_id)
     with _conn() as conn:
         rows = conn.execute(
             """SELECT tr.*, m.name as mode_name, m.color as mode_color
@@ -374,8 +402,8 @@ def get_range_period_summary(start_date: date, end_date: date) -> dict:
                WHERE COALESCE(tr.duration_seconds, 0) > 0
                  AND julianday(tr.start_time) < julianday(?)
                  AND julianday(tr.start_time) + (COALESCE(tr.duration_seconds, 0) / 86400.0) > julianday(?)
-               ORDER BY tr.start_time""",
-            (window_end.isoformat(), window_start.isoformat()),
+               """ + mode_filter + " ORDER BY tr.start_time",
+            params,
         ).fetchall()
 
     for r in rows:

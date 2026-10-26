@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QTabWidget, QHeaderView, QFrame,
     QToolTip, QSizePolicy, QDateTimeEdit, QCalendarWidget, QMessageBox, QScrollArea, QLayout,
+    QStackedWidget, QButtonGroup,
 )
 from PySide6.QtCore import Qt, QDateTime, QTime, Signal
 from PySide6.QtGui import QColor, QCursor, QFont
@@ -18,6 +19,7 @@ from app.database import (
 from app.ui.colors import readable_color
 from app.ui.components import ActivityChart, ElidedLabel, icon, page_header, scroll_page
 from app.ui.theme import current_theme, theme_colors, mode_display_color
+from app.ui.task_stats_page import TaskStatsPage
 
 
 def format_duration(seconds: int) -> str:
@@ -66,6 +68,22 @@ class HistoryPage(QWidget):
         layout.setContentsMargins(32, 28, 32, 24)
         layout.addWidget(page_header("时间统计", "回看每一段投入，看见自己的节奏。"))
 
+        views = QHBoxLayout()
+        views.setSpacing(6)
+        self._view_group = QButtonGroup(self)
+        self.date_view_button = QPushButton("按日期")
+        self.task_view_button = QPushButton("按任务")
+        for index, button in enumerate((self.date_view_button, self.task_view_button)):
+            button.setObjectName("toggleButton")
+            button.setCheckable(True)
+            self._view_group.addButton(button, index)
+            views.addWidget(button)
+        self.date_view_button.setChecked(True)
+        views.addStretch()
+        layout.addLayout(views)
+        self._views = QStackedWidget()
+        layout.addWidget(self._views, 1)
+
         tabs = QTabWidget()
         self._tabs = tabs
         tabs.addTab(scroll_page(self._build_day_tab()), "日")
@@ -74,7 +92,11 @@ class HistoryPage(QWidget):
         tabs.addTab(scroll_page(self._build_manage_tab()), "管理")
         tabs.tabBar().setExpanding(False)
         tabs.currentChanged.connect(self._on_tab_changed)
-        layout.addWidget(tabs)
+        self._views.addWidget(tabs)
+        self.task_page = TaskStatsPage()
+        self.task_page.day_requested.connect(self._open_task_day)
+        self._views.addWidget(scroll_page(self.task_page))
+        self._view_group.idClicked.connect(self._switch_view)
         for button in (self.day_prev, self.week_prev, self.month_prev):
             button.setText("")
             button.setIcon(icon("chevron-left"))
@@ -346,12 +368,31 @@ class HistoryPage(QWidget):
         self._refresh_week()
         self._refresh_month()
         self._refresh_manage_records()
+        if self._views.currentIndex() == 1:
+            self.task_page.refresh()
 
     def refresh_theme(self):
         self._refresh_day()
         self._refresh_week()
         self._refresh_month()
         self._refresh_manage_records()
+        self.task_page.refresh_theme()
+
+    def _switch_view(self, index):
+        self._views.setCurrentIndex(index)
+        self._view_group.button(index).setChecked(True)
+        if index == 1:
+            self.task_page.refresh()
+
+    def open_task_statistics(self, mode_id=None):
+        self._switch_view(1)
+        self.task_page.select_task(mode_id)
+
+    def _open_task_day(self, day):
+        self._current_date = day
+        self._switch_view(0)
+        self._tabs.setCurrentIndex(0)
+        self._refresh_day()
 
     def _on_tab_changed(self, index):
         if index == 0:

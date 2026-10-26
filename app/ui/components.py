@@ -22,6 +22,7 @@ _PATHS = {
     "arrow": '<path d="M5 12h14m-5-5 5 5-5 5"/>',
     "chevron-left": '<path d="m15 18-6-6 6-6"/>',
     "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"/>',
     "check": '<path d="m5 12 4 4L19 6"/>',
     "lock": '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/>',
     "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
@@ -150,6 +151,8 @@ class ActivityChart(QWidget):
         super().__init__(parent)
         self._days = []
         self._dates = []
+        self._detail_labels = []
+        self._value_label = "每日投入"
         self._hover_index = -1
         self._hover_levels = []
         self._hover_from = []
@@ -172,15 +175,20 @@ class ActivityChart(QWidget):
         self.setMouseTracking(True)
         self.setAccessibleName("每日累计时长柱状图")
 
-    def set_days(self, days, *, dates=None):
+    def set_days(self, days, *, dates=None, detail_labels=None, value_label="每日投入"):
         days = list(days)
         dates = list(dates) if dates is not None else [None] * len(days)
         if len(dates) != len(days):
             raise ValueError("Each chart day must have a matching date")
-        if days == self._days and dates == self._dates:
+        detail_labels = list(detail_labels) if detail_labels is not None else [None] * len(days)
+        if len(detail_labels) != len(days):
+            raise ValueError("Each chart column must have a matching detail label")
+        if (days == self._days and dates == self._dates
+                and detail_labels == self._detail_labels and value_label == self._value_label):
             return
         self._reset_hover()
         self._days, self._dates = days, dates
+        self._detail_labels, self._value_label = detail_labels, value_label
         self._hover_levels = [0.0] * len(days)
         self.setAccessibleDescription("；".join(
             self._detail_text(i).replace("\n", "，") for i in range(len(days))
@@ -190,7 +198,34 @@ class ActivityChart(QWidget):
         self.update()
 
     def _plot_area(self):
-        return QRectF(self.rect().adjusted(8, 20, -8, -28))
+        bottom_margin = max(28, self.fontMetrics().height() + 12)
+        return QRectF(self.rect().adjusted(8, 20, -8, -bottom_margin))
+
+    def _axis_labels(self, area):
+        """Let text span adjacent columns, reserving space for both endpoints."""
+        metrics = self.fontMetrics()
+        count = len(self._days)
+        step = area.width() / count
+
+        def label_at(index):
+            text = self._days[index][0]
+            width = max(metrics.horizontalAdvance(text), metrics.boundingRect(text).width()) + 8
+            center = area.left() + step * (index + .5)
+            left = max(2, min(center - width / 2, self.width() - width - 2))
+            return QRectF(left, area.bottom() + 6, width, metrics.height() + 2), text
+
+        labels = [label_at(0)]
+        last_rect, last_text = label_at(count - 1)
+        gap = 8
+        for index in range(1, count - 1):
+            if count > 7 and index % 5:
+                continue
+            rect, text = label_at(index)
+            if rect.left() >= labels[-1][0].right() + gap and rect.right() + gap <= last_rect.left():
+                labels.append((rect, text))
+        if count > 1 and last_rect.left() >= labels[-1][0].right() + gap:
+            labels.append((last_rect, last_text))
+        return labels
 
     def _index_at(self, position):
         area = self._plot_area()
@@ -204,6 +239,8 @@ class ActivityChart(QWidget):
         if day is not None:
             weekday = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")[day.weekday()]
             label = f"{day.isoformat()}（{weekday}）"
+        if self._detail_labels[index] is not None:
+            label = self._detail_labels[index]
         hours, remainder = divmod(total, 3600)
         minutes, seconds = divmod(remainder, 60)
         duration = f"{hours}小时 {minutes}分钟" if hours else f"{minutes}分钟"
@@ -259,7 +296,7 @@ class ActivityChart(QWidget):
         maximum = max(3600, peak)
         step = area.width() / len(self._days)
         colors = theme_colors()
-        for i, (label, seconds) in enumerate(self._days):
+        for i, (_, seconds) in enumerate(self._days):
             hover = self._hover_levels[i]
             width = max(3, step * (.56 + .10 * hover))
             x = area.left() + step * (i + .5) - width / 2
@@ -273,11 +310,10 @@ class ActivityChart(QWidget):
             base = colors["chart"] if seconds else colors["track"]
             painter.setBrush(QColor(mix_color(base, colors["title"], .18 * hover)))
             painter.drawRoundedRect(QRectF(x, area.bottom() - height, width, height), 3, 3)
-            if len(self._days) <= 7 or i % 5 == 0 or i == len(self._days) - 1:
-                painter.setPen(QColor(colors["muted"]))
-                painter.drawText(QRectF(area.left() + step * i, area.bottom() + 10, step, 20), Qt.AlignCenter, label)
         painter.setPen(QColor(colors["muted"]))
-        painter.drawText(8, 13, f"每日投入 · 最高 {peak // 3600}h {(peak % 3600) // 60}m")
+        for rect, label in self._axis_labels(area):
+            painter.drawText(rect, Qt.AlignCenter, label)
+        painter.drawText(8, 13, f"{self._value_label} · 最高 {peak // 3600}h {(peak % 3600) // 60}m")
 
     def mouseMoveEvent(self, event):
         index = self._index_at(event.position())

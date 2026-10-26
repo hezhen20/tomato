@@ -40,6 +40,7 @@ def format_duration(seconds: int) -> str:
 class MainPage(QWidget):
     break_reminder_requested = Signal(str, int, str)
     history_requested = Signal()
+    task_statistics_requested = Signal(object)
     settings_requested = Signal()
 
     def __init__(self):
@@ -202,6 +203,14 @@ class MainPage(QWidget):
         self.summary_total.setObjectName("todayTotal")
         summary_top.addWidget(self.summary_total)
         summary_top.addStretch()
+        self.task_stats_btn = QPushButton("任务统计")
+        self.task_stats_btn.setObjectName("textButton")
+        self.task_stats_btn.setCursor(Qt.PointingHandCursor)
+        self.task_stats_btn.setToolTip("查看当前任务的专注时长与时段分布")
+        self.task_stats_btn.clicked.connect(lambda: self.task_statistics_requested.emit(
+            self._current_mode["id"] if self._current_mode else None
+        ))
+        summary_top.addWidget(self.task_stats_btn)
         history_btn = QPushButton("查看统计  →")
         history_btn.setObjectName("textButton")
         history_btn.setCursor(Qt.PointingHandCursor)

@@ -188,6 +188,36 @@ class UiWorkflowTests(unittest.TestCase):
         page.stop_timer()
         self.assertEqual(db.get_daily_summary(date.today())["新的工作模式"]["seconds"], 1)
 
+    def test_task_statistics_shortcut_keeps_timer_running_and_fits_compact_window(self):
+        window = self.make_window()
+        task_id = db.add_mode("长任务名称" * 30, "#89B4FA")
+        window._on_modes_changed()
+        page = window._main_page
+        page._on_mode_click(next(mode for mode in db.get_modes() if mode["id"] == task_id))
+        for _ in range(5):
+            page._tick()
+        record_id = page._current_record_id
+        elapsed = page._session_elapsed
+        QTest.mouseClick(page.task_stats_btn, Qt.LeftButton)
+        stats = window._history_page.task_page
+        self.assertEqual(window._stack.currentIndex(), 2)
+        self.assertEqual(window._history_page._views.currentIndex(), 1)
+        self.assertEqual(stats.task_combo.currentData(), task_id)
+        stats.task_combo.setCurrentIndex(0)
+        self.assertTrue(page._running)
+        self.assertEqual(page._current_mode["id"], task_id)
+        self.assertEqual(page._current_record_id, record_id)
+        self.assertGreaterEqual(page._session_elapsed, elapsed)
+        window.resize(760, 620)
+        self.app.processEvents()
+        scroll = window._history_page._views.widget(1)
+        self.assertEqual(window.width(), 760)
+        self.assertLessEqual(stats.width(), scroll.viewport().width())
+        self.assertGreater(stats.task_combo.width(), 100)
+        self.assertTrue(stats._timer.isActive())
+        window._switch_page(1)
+        self.assertFalse(stats._timer.isActive())
+
     def test_navigation_actions_open_history_and_mode_settings(self):
         window = self.make_window()
         window._main_page.history_requested.emit()
