@@ -36,6 +36,10 @@ MORNING_START = time(4, 0)
 AFTERNOON_START = time(12, 0)
 EVENING_START = time(18, 0)
 
+# 统计日从 04:00 开始：凌晨 00:00–04:00 仍属于前一天晚上。
+# 计时页、历史页和任务统计统一使用这一口径。
+STAT_DAY_START = MORNING_START
+
 # ---- 休息提醒设置 ----
 BREAK_REMINDER_ENABLED_KEY = "break_reminder_enabled"
 BREAK_REMINDER_INTERVAL_KEY = "break_reminder_interval_minutes"
@@ -267,8 +271,19 @@ def delete_records_in_datetime_range(start_at: datetime, end_at: datetime) -> in
         return cursor.rowcount
 
 
+def stat_day(moment: datetime | None = None) -> date:
+    """返回某时刻所属的统计日；凌晨 04:00 前仍算前一天。"""
+    moment = moment or datetime.now()
+    if moment.time() < STAT_DAY_START:
+        return moment.date() - timedelta(days=1)
+    return moment.date()
+
+
 def get_daily_summary(d: date) -> dict:
-    """返回某天各模式的总时长 {mode_name: {seconds, color}}"""
+    """按自然日（00:00–24:00）汇总各模式时长。
+
+    界面统计使用 04:00 起的统计日，请优先使用 get_stat_day_summary()。
+    """
     records = get_records_for_date(d)
     summary = {}
     for r in records:
@@ -329,11 +344,11 @@ def _split_record_periods(start_dt: datetime, duration_seconds: int) -> list:
     pieces = []
 
     while cursor < end_dt:
-        stat_day, period_key, period_end = _period_for_datetime(cursor)
+        day, period_key, period_end = _period_for_datetime(cursor)
         next_cursor = min(period_end, end_dt)
         seconds = (next_cursor - cursor).total_seconds()
         if seconds > 0:
-            pieces.append((stat_day.isoformat(), period_key, seconds))
+            pieces.append((day.isoformat(), period_key, seconds))
         if next_cursor <= cursor:
             break
         cursor = next_cursor
@@ -436,6 +451,23 @@ def get_range_period_summary(start_date: date, end_date: date, mode_id: int | No
             }
 
     return normalized_result
+
+
+def get_stat_day_summary(day: date) -> dict:
+    """返回统计日（04:00–次日 04:00）各模式总时长 {mode_name: {seconds, color}}。
+
+    与历史/任务统计同一口径：凌晨 00:00–04:00 归入前一天晚上，
+    跨越 04:00 的记录按实际秒数拆分。
+    """
+    summary = {}
+    for modes in get_range_period_summary(day, day).values():
+        for name, info in modes.items():
+            entry = summary.setdefault(
+                name,
+                {"seconds": 0, "color": info["color"]},
+            )
+            entry["seconds"] += int(info["seconds"] or 0)
+    return summary
 
 
 # ---- 设置 ----

@@ -4,7 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,6 +25,19 @@ from app.ui.history_page import HistoryPage
 from app.ui.break_reminder import BreakReminderToast
 from app.ui.settings_page import SettingsPage
 from main import load_stylesheet
+
+
+def stat_day():
+    """当前统计日（04:00 起算），与计时页、历史页同一口径。"""
+    return db.stat_day()
+
+
+def stat_day_moment(hours=9, minutes=0):
+    """统计日内的固定时刻，保证测试与本机运行时间无关。"""
+    return (
+        datetime.combine(stat_day(), datetime.min.time())
+        + timedelta(hours=hours, minutes=minutes)
+    )
 
 
 class UiWorkflowTests(unittest.TestCase):
@@ -85,7 +98,7 @@ class UiWorkflowTests(unittest.TestCase):
         return window
 
     def insert_record(self, mode_id, seconds, start=None):
-        start = start or datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        start = start or stat_day_moment(9)
         with db._conn() as conn:
             cursor = conn.execute(
                 "INSERT INTO time_record(mode_id,start_time,end_time,duration_seconds) VALUES(?,?,?,?)",
@@ -129,7 +142,7 @@ class UiWorkflowTests(unittest.TestCase):
         QTest.mouseClick(page.pause_btn, Qt.LeftButton)
         self.assertFalse(page._paused)
         QTest.mouseClick(page.stop_btn, Qt.LeftButton)
-        self.assertEqual(db.get_daily_summary(date.today())[mode["name"]]["seconds"], 127)
+        self.assertEqual(db.get_stat_day_summary(stat_day())[mode["name"]]["seconds"], 127)
         self.assertEqual(page.timer_label.text(), "00:02:07")
         self.assertFalse(page.start_btn.isHidden())
 
@@ -144,7 +157,7 @@ class UiWorkflowTests(unittest.TestCase):
         for _ in range(3):
             page._tick()
         QTest.mouseClick(page.stop_btn, Qt.LeftButton)
-        summary = db.get_daily_summary(date.today())
+        summary = db.get_stat_day_summary(stat_day())
         self.assertEqual(summary[first["name"]]["seconds"], 5)
         self.assertEqual(summary["阅读"]["seconds"], 3)
 
@@ -154,7 +167,7 @@ class UiWorkflowTests(unittest.TestCase):
         for _ in range(35):
             page._tick()
         QTest.mouseClick(page.stop_btn, Qt.LeftButton)
-        self.assertEqual(db.get_daily_summary(date.today())[page._current_mode["name"]]["seconds"], 35)
+        self.assertEqual(db.get_stat_day_summary(stat_day())[page._current_mode["name"]]["seconds"], 35)
         self.assertEqual(page.timer_label.text(), "00:00:35")
 
     def test_hotkey_recorder_takes_precedence_over_navigation(self):
@@ -186,7 +199,7 @@ class UiWorkflowTests(unittest.TestCase):
         self.assertEqual(page._current_mode["id"], mode_id)
         self.assertEqual(page._current_mode["name"], "新的工作模式")
         page.stop_timer()
-        self.assertEqual(db.get_daily_summary(date.today())["新的工作模式"]["seconds"], 1)
+        self.assertEqual(db.get_stat_day_summary(stat_day())["新的工作模式"]["seconds"], 1)
 
     def test_task_statistics_shortcut_keeps_timer_running_and_fits_compact_window(self):
         window = self.make_window()
@@ -286,6 +299,9 @@ class UiWorkflowTests(unittest.TestCase):
         self.insert_record(mode["id"], 3600)
         active_id = db.start_record(mode["id"])
         page = self.show_widget(HistoryPage())
+        page.manage_start_edit.setDateTime(
+            QDateTime(datetime.combine(stat_day(), datetime.min.time()))
+        )
         page.manage_end_edit.setDateTime(QDateTime.currentDateTime().addDays(1))
         self.assertTrue(page.manage_delete_btn.isEnabled())
         # Confirm both dialogs; this exercises the real delete handler and refreshes.
@@ -300,7 +316,7 @@ class UiWorkflowTests(unittest.TestCase):
 
     def test_delete_records_while_paused_rebases_timer_before_resume(self):
         mode = db.get_modes()[0]
-        today = datetime.combine(date.today(), datetime.min.time())
+        today = datetime.combine(stat_day(), datetime.min.time())
         self.insert_record(mode["id"], 3600, today + timedelta(hours=9))
         self.insert_record(mode["id"], 120, today + timedelta(hours=11))
         window = self.make_window()
@@ -339,7 +355,7 @@ class UiWorkflowTests(unittest.TestCase):
             page._tick()
         self.assertEqual(page.timer_label.text(), "00:02:37")
         page.stop_timer()
-        self.assertEqual(db.get_daily_summary(date.today())[mode["name"]]["seconds"], 157)
+        self.assertEqual(db.get_stat_day_summary(stat_day())[mode["name"]]["seconds"], 157)
         self.assertEqual(page.timer_label.text(), "00:02:37")
 
     def test_delete_autosaved_records_preserves_live_unsaved_seconds(self):
@@ -356,6 +372,9 @@ class UiWorkflowTests(unittest.TestCase):
         window._switch_page(2)
         history = window._history_page
         history._tabs.setCurrentIndex(3)
+        history.manage_start_edit.setDateTime(
+            QDateTime(datetime.combine(stat_day(), datetime.min.time()))
+        )
         history.manage_end_edit.setDateTime(QDateTime.currentDateTime().addDays(1))
         from PySide6.QtWidgets import QMessageBox
         with patch.object(QMessageBox, "exec", return_value=QMessageBox.Yes):
@@ -377,13 +396,13 @@ class UiWorkflowTests(unittest.TestCase):
         self.assertEqual(page.timer_label.text(), "00:00:30")
         page._tick()
         page.stop_timer()
-        self.assertEqual(db.get_daily_summary(date.today())[mode["name"]]["seconds"], 31)
+        self.assertEqual(db.get_stat_day_summary(stat_day())[mode["name"]]["seconds"], 31)
         self.assertEqual(page.timer_label.text(), "00:00:31")
 
     def test_delete_stopped_records_resets_timer_and_restart_uses_remaining_total(self):
         mode = db.get_modes()[0]
         other_id = db.add_mode("阅读", "#99AAEE")
-        today = datetime.combine(date.today(), datetime.min.time())
+        today = datetime.combine(stat_day(), datetime.min.time())
         self.insert_record(mode["id"], 3600, today + timedelta(hours=9))
         self.insert_record(other_id, 120, today + timedelta(hours=11))
         window = self.make_window()
@@ -409,7 +428,7 @@ class UiWorkflowTests(unittest.TestCase):
         QTest.mouseClick(page.start_btn, Qt.LeftButton)
         page._tick()
         page.stop_timer()
-        summary = db.get_daily_summary(date.today())
+        summary = db.get_stat_day_summary(stat_day())
         self.assertEqual(summary[mode["name"]]["seconds"], 1)
         self.assertEqual(summary["阅读"]["seconds"], 120)
         self.assertEqual(page.timer_label.text(), "00:00:01")
@@ -425,7 +444,7 @@ class UiWorkflowTests(unittest.TestCase):
             page._tick()
         page.toggle_pause()
         window._switch_page(2)
-        db.delete_records_in_date_range(date.today(), date.today())
+        db.delete_records_in_date_range(stat_day(), stat_day())
         window._switch_page(1)
         self.assertEqual(page.timer_label.text(), "00:00:07")
         self.assertEqual(page._elapsed, 7)

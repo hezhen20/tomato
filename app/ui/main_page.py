@@ -12,15 +12,20 @@ from app.database import (
     break_reminder_grace_minutes,
     break_reminder_interval_minutes,
     break_reminder_message,
-    get_daily_summary,
     get_modes,
+    get_stat_day_summary,
     start_record,
+    stat_day,
     stop_record,
 )
 from app.ui.colors import mix_color, readable_color
 from app.ui.components import ElidedLabel, icon, page_header, scroll_page
 from app.ui.theme import current_theme, theme_colors, mode_display_color
 from app.ui.materials import FrostedSurface
+
+WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+STAT_DAY_HINT = "统计日从 04:00 开始：凌晨 00:00–04:00 仍计入前一天。"
+
 
 def format_time(seconds: int) -> str:
     h = seconds // 3600
@@ -56,7 +61,7 @@ class MainPage(QWidget):
         self._paused = False
         self._current_mode = None
         self._current_record_id = None
-        self._current_date = date.today()  # 当前计时所属日期
+        self._current_date = stat_day()  # 当前计时所属的统计日（04:00 起算）
         self._mode_buttons = []
         self._continuous_active_seconds = 0
         self._pause_started_at = None
@@ -349,8 +354,8 @@ class MainPage(QWidget):
         self._start_mode(mode)
 
     def _get_today_accumulated(self, mode_id: int) -> int:
-        """获取今天该模式已累积的秒数"""
-        summary = get_daily_summary(date.today())
+        """获取当前统计日（04:00–次日 04:00）该模式已累积的秒数"""
+        summary = get_stat_day_summary(stat_day())
         modes = get_modes()
         for m in modes:
             if m["id"] == mode_id:
@@ -360,8 +365,8 @@ class MainPage(QWidget):
 
     def _start_mode(self, mode: dict):
         self._current_mode = mode
-        self._current_date = date.today()
-        # 从今天已有记录累积，而不是从零开始
+        self._current_date = stat_day()
+        # 从当前统计日已有记录累积，而不是从零开始
         self._elapsed = self._get_today_accumulated(mode["id"])
         self._session_elapsed = 0
         self._paused = False
@@ -395,8 +400,8 @@ class MainPage(QWidget):
         if not self._running:
             return
         if self._paused:
-            # 恢复前检测跨天
-            today = date.today()
+            # 恢复前检测统计日切换（04:00）
+            today = stat_day()
             if today != self._current_date:
                 # 保存旧记录到昨天
                 if self._current_record_id and self._session_elapsed > 0:
@@ -466,7 +471,7 @@ class MainPage(QWidget):
         self._update_controls()
 
     def _tick(self):
-        today = date.today()
+        today = stat_day()
         if today != self._current_date:
             self._handle_day_change(today)
             return
@@ -498,15 +503,15 @@ class MainPage(QWidget):
             self.refresh_today_summary()
 
     def _handle_day_change(self, new_date: date):
-        """跨天自动切割：保存昨天的记录，开始新一天的记录"""
-        # 保存到昨天
+        """统计日切换（04:00）：保存前一天的记录，开始新一天的记录"""
+        # 保存到前一天
         if self._current_record_id and self._session_elapsed > 0:
             stop_record(self._current_record_id, self._session_elapsed)
 
         # 新的一天，重新开始
         self._current_date = new_date
         self._session_elapsed = 0
-        self._elapsed = 0  # 新一天从0开始
+        self._elapsed = self._get_today_accumulated(self._current_mode["id"])
         self._current_record_id = start_record(self._current_mode["id"])
         self._continuous_active_seconds = 0
         self._reminder_pending = False
@@ -525,8 +530,8 @@ class MainPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        today = date.today()
-        summary = get_daily_summary(today)
+        today = stat_day()
+        summary = get_stat_day_summary(today)
         if self._running and self._current_mode and self._session_elapsed and self._current_date == today:
             name = self._current_mode["name"]
             entry = summary.setdefault(name, {"seconds": 0, "color": self._current_mode["color"]})
@@ -540,7 +545,12 @@ class MainPage(QWidget):
 
         total = sum(item["seconds"] for item in summary.values())
         self.summary_total.setText(format_duration(total))
-        self.date_label.setText(f"{today.month}月{today.day}日 · " + ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()])
+        # 04:00 前仍属前一天，徽标显示统计日并说明口径，避免和统计页对不上。
+        self.date_label.setText(
+            f"{today.month}月{today.day}日 · {WEEKDAYS[today.weekday()]}"
+            + ("" if today == date.today() else " · 统计日至 04:00")
+        )
+        self.date_label.setToolTip(STAT_DAY_HINT)
         if not summary:
             lbl = QLabel("今天的故事，从第一次专注开始。\n开始计时后，你的投入会在这里慢慢积累。")
             lbl.setProperty("class", "emptyState")

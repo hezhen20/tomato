@@ -15,6 +15,7 @@ from app.database import (
     delete_records_in_datetime_range,
     get_records_in_datetime_range,
     get_range_period_summary,
+    stat_day,
 )
 from app.ui.colors import readable_color
 from app.ui.components import ActivityChart, ElidedLabel, icon, page_header, scroll_page
@@ -59,7 +60,7 @@ class HistoryPage(QWidget):
 
     def __init__(self):
         super().__init__()
-        self._current_date = date.today()
+        self._current_date = stat_day()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -363,7 +364,7 @@ class HistoryPage(QWidget):
         return edit
 
     def refresh(self):
-        self._current_date = date.today()
+        self._current_date = stat_day()
         self._refresh_day()
         self._refresh_week()
         self._refresh_month()
@@ -411,7 +412,7 @@ class HistoryPage(QWidget):
 
     def _refresh_day(self):
         d = self._current_date
-        today = date.today()
+        today = stat_day()
         if d == today:
             self.day_label.setText(f"今天 ({d.strftime('%m/%d')})")
         else:

@@ -1,6 +1,6 @@
 """以已有计时模式为任务标签的独立统计视图。"""
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from PySide6.QtCore import QDate, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QPainter
@@ -10,7 +10,10 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from app.database import PERIOD_KEYS, PERIOD_LABELS, get_mode_date_bounds, get_modes, get_range_period_summary
+from app.database import (
+    PERIOD_KEYS, PERIOD_LABELS, get_mode_date_bounds, get_modes,
+    get_range_period_summary, stat_day,
+)
 from app.ui.components import ActivityChart, ElidedLabel, icon
 from app.ui.theme import mode_display_color
 
@@ -80,7 +83,7 @@ class TaskStatsPage(QWidget):
 
     @staticmethod
     def _today():
-        return (datetime.now() - timedelta(hours=4)).date()
+        return stat_day()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
