@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QStackedWidget, QSystemTrayIcon, QMenu, QLabel, QFrame, QButtonGroup,
 )
-from PySide6.QtCore import Qt, Slot, QTimer
+from PySide6.QtCore import Qt, Slot, QTimer, QSize
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 
 from app.ui.login_page import LoginPage
@@ -13,7 +13,7 @@ from app.ui.settings_page import SettingsPage, floating_time_mask_enabled
 from app.ui.floating_ball import FloatingBall
 from app.ui.break_reminder import BreakReminderToast
 from app.hotkeys import HotkeyManager
-from app.ui.components import app_icon, icon, logo, ElidedLabel, Rule, ui_font
+from app.ui.components import app_icon, icon, logo, ElidedLabel, Rule
 from app.ui.theme import current_theme, current_mode, theme_manager, theme_colors
 from app.ui.materials import PaperWorkspace, update_native_chrome
 
@@ -261,9 +261,18 @@ class MainWindow(QMainWindow):
         update_native_chrome(self)
 
     def _update_theme_toggle(self):
-        label = "切换到浅色" if current_mode() == "dark" else "切换到深色"
-        self._theme_toggle.setText("☀" if current_mode() == "dark" else "☾")
-        self._theme_toggle.setFont(ui_font(14))
+        """Draw the sun/moon with the shared vector set.
+
+        The ☀/☾ characters are not in Segoe UI; Windows fell back to a font
+        without them and painted an empty box in the navigation.
+        """
+        dark = current_mode() == "dark"
+        label = "切换到浅色" if dark else "切换到深色"
+        self._theme_toggle.setText("")
+        self._theme_toggle.setIcon(
+            icon("sun" if dark else "moon", theme_colors()["muted"], 17)
+        )
+        self._theme_toggle.setIconSize(QSize(17, 17))
         self._theme_toggle.setToolTip(label)
         self._theme_toggle.setAccessibleName(label)
 

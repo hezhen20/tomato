@@ -45,12 +45,6 @@ PERIOD_TIME_RANGES = {
     "evening": "18:00-04:00",
 }
 
-PERIOD_ICONS = {
-    "morning": "☀",
-    "afternoon": "◐",
-    "evening": "☾",
-}
-
 DETAIL_COLUMN_INDEX = 2
 
 WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -634,11 +628,16 @@ class HistoryPage(QWidget):
             row_index += 1
 
     def _clear_layout(self, layout):
+        """Detach before deleting, or the old cards keep painting until the
+        event loop gets round to them and the rebuilt rows overlap."""
         while layout.count():
             item = layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.layout():
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+            elif item.layout() is not None:
                 self._clear_layout(item.layout())
 
     def _format_period_detail(self, periods: dict) -> str:
