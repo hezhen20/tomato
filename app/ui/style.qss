@@ -1,4 +1,6 @@
-/* Tomato desktop — graphite / configurable accent. Native Qt widgets, one shared vocabulary. */
+/* Tomato — paper & ink. Warm stock, hairline rules, one vermilion accent.
+   Fonts: Segoe UI for interface, SimSun for display, Consolas for figures. */
+
 QWidget {
     font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
     font-size: 13px;
@@ -7,189 +9,381 @@ QWidget {
     selection-background-color: @selection;
     selection-color: @selection_text;
 }
-QMainWindow { background-color: @window; }
-QWidget#centralWidget, QWidget#loginPage { background: transparent; }
-QToolTip { background: @hover; color: @title; border: 1px solid @border_strong; border-radius: 5px; padding: 7px 10px; }
+
+QMainWindow, QWidget#centralWidget, QWidget#loginPage { background: transparent; }
+QDialog, QMessageBox, QColorDialog { background-color: @surface; }
+
+QToolTip {
+    background-color: @surface; color: @text;
+    border: 1px solid @border_strong; border-radius: 2px; padding: 7px 10px;
+}
+
+/* ---------- typescale ---------- */
 QLabel { border: none; background: transparent; }
-QLabel[class="pageTitle"] { font-size: 25px; font-weight: 600; color: @title; }
-QLabel[class="sectionTitle"] { font-size: 15px; font-weight: 600; color: @text; }
-QLabel[class="mutedLabel"], QLabel#subtitleLabel { color: @muted; font-size: 12px; }
-QLabel[class="emptyState"] { color: @muted; font-size: 13px; padding: 22px 8px; }
-QLabel#msgLabel, QLabel#settingsSaveStatus { color: @danger; min-height: 20px; font-size: 12px; }
+QLabel[class="pageTitle"] {
+    font-family: "Songti SC", "SimSun", serif;
+    font-size: 38px; font-weight: 700; color: @title; letter-spacing: 4px;
+}
+QLabel[class="sectionTitle"] { font-size: 14px; font-weight: 600; color: @text; letter-spacing: 1px; }
+QLabel[class="mutedLabel"], QLabel#subtitleLabel { color: @muted; font-size: 13px; }
+QLabel[class="emptyState"] { color: @muted; font-size: 13px; padding: 18px 4px; }
+QLabel[class="fieldLabel"] { color: @muted; font-size: 12px; letter-spacing: 1px; }
+QLabel[class="settingsTitle"] {
+    font-family: "Songti SC", "SimSun", serif;
+    font-size: 21px; font-weight: 700; color: @title; letter-spacing: 2px;
+}
+QLabel#msgLabel, QLabel#settingsSaveStatus { color: @danger; min-height: 18px; font-size: 11px; }
 QLabel#settingsSaveStatus[feedback="success"], QLabel#msgLabel[feedback="success"] { color: @success; }
 QLabel#settingsSaveStatus[feedback="error"], QLabel#msgLabel[feedback="error"] { color: @danger; }
-QLabel#dateBadge { color: @muted; font-size: 12px; background: @surface_alt; border: 1px solid @hover; border-radius: 7px; padding: 7px 12px; }
+QLabel#dateBadge {
+    color: @muted; font-size: 11px; letter-spacing: 1px;
+    border: 1px solid @border; border-radius: 2px; padding: 6px 10px;
+}
 
-/* Shell */
+QLabel[class="monoCaption"] {
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 11px; letter-spacing: 1.6px; color: @muted;
+}
+QLabel[class="weekValue"] {
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 12px; color: @blue;
+}
+
+/* ---------- top bar ---------- */
 QFrame#navBar { background: transparent; border: none; }
-QLabel#sidebarBrand { font-size: 18px; font-weight: 600; color: @title; }
-QLabel#sidebarHint { color: @muted; font-size: 17px; padding: 0 4px; }
-QLabel#localStatus { color: @muted; font-size: 11px; padding: 0 4px; }
-QFrame#sidebarRule { background: @border; border: none; }
-QLabel#avatar { background: @accent_soft; color: @accent_text; border-radius: 10px; font-size: 13px; font-weight: 600; }
-QLabel#accountLabel { color: @text; font-size: 12px; }
-QPushButton.navBtn { background: transparent; color: @muted; text-align: left; padding: 11px 12px; border: 1px solid transparent; border-radius: 7px; min-height: 18px; }
-QPushButton.navBtn:hover { background: @surface_alt; color: @title; }
-QPushButton.navBtn:checked { background: @accent_soft; color: @accent_text; font-weight: 600; }
-QPushButton.navBtn:focus { border-color: @accent_border; }
+QLabel#brandName { font-size: 12px; font-weight: 600; letter-spacing: 6px; color: @title; }
+QLabel#brandSub { font-size: 10px; letter-spacing: 2.4px; color: @muted; }
+QLabel#localStatus { color: @muted; font-size: 11px; letter-spacing: 1px; }
+QFrame#sidebarRule { background: @rule_soft; border: none; }
+QLabel#avatar {
+    border: 1px solid @border_strong; border-radius: 2px;
+    color: @muted; font-size: 11px; font-weight: 600;
+}
+QLabel#accountLabel { color: @muted; font-size: 12px; }
+QPushButton.navBtn {
+    background: transparent; color: @muted; text-align: left;
+    border: none; border-bottom: 1.5px solid transparent;
+    padding: 6px 2px 5px 2px; letter-spacing: 2px; font-size: 13px;
+    min-height: 18px;
+}
+QPushButton.navBtn:hover { color: @text; }
+QPushButton.navBtn:checked { color: @text; border-bottom: 1.5px solid @accent; }
 
-/* Standard controls */
-QPushButton { background: @button; color: @text; border: 1px solid @border; border-radius: 7px; padding: 8px 14px; min-height: 18px; font-size: 13px; }
-QPushButton:hover { background: @hover; border-color: @border_strong; color: @title; }
-QPushButton:pressed { background: @surface; }
+/* ---------- controls ---------- */
+QPushButton {
+    background: transparent; color: @text;
+    border: 1px solid @border_strong; border-radius: 2px;
+    padding: 8px 16px; min-height: 17px; font-size: 13px; letter-spacing: 1px;
+}
+QPushButton:hover { background: @hover; color: @title; }
+QPushButton:pressed { background: @pressed; }
 QPushButton:focus { border-color: @focus; }
-QPushButton:disabled { background: @pressed; color: @disabled; border-color: @border; }
-QPushButton#primaryButton, QPushButton#btnPause { background: @accent; color: @on_accent; border: 1px solid @accent; font-weight: 600; }
-QPushButton#primaryButton:hover, QPushButton#btnPause:hover { background: @accent_hover; border-color: @accent_hover; }
-QPushButton#primaryButton:pressed, QPushButton#btnPause:pressed { background: @accent_pressed; }
-QPushButton#primaryButton:focus, QPushButton#btnPause:focus { border: 1px solid @title; }
-QPushButton#primaryButton:disabled, QPushButton#btnPause:disabled { background: @accent_soft; color: @disabled; border-color: @accent_border; }
-QPushButton#ghostButton { background: transparent; border-color: transparent; color: @muted; padding: 6px 8px; }
-QPushButton#ghostButton:hover { background: @hover; color: @title; }
-QPushButton#textButton { background: transparent; border: 1px solid transparent; color: @muted; font-size: 12px; padding: 2px 0; min-height: 18px; }
-QPushButton#textButton:hover { color: @accent_text; }
-QPushButton#textButton:focus { border-color: @accent_border; }
-QPushButton#btnStop { background: @button; color: @text; border-color: @border; padding-left: 20px; padding-right: 20px; }
-QPushButton#btnStop:hover { background: @danger_bg; color: @danger; border-color: @danger_border; }
-QPushButton#btnStop:disabled { background: @pressed; color: @disabled; border-color: @border; }
-QPushButton#toggleButton { background: @button; color: @muted; border: 1px solid @border; border-radius: 7px; }
-QPushButton#toggleButton:checked { background: @accent_soft; color: @accent_text; border-color: @accent_border; }
-QPushButton#toggleButton:checked:hover { background: @accent_soft_hover; }
-QPushButton#navArrowButton { padding: 0; min-width: 34px; max-width: 34px; min-height: 34px; max-height: 34px; background: @surface_alt; border-color: @border; }
-QPushButton.colorBtn { padding: 0; min-width: 0; min-height: 0; }
-QPushButton#hotkeyRecorder { font-family: "Cascadia Mono", "Consolas", monospace; background: @surface; color: @text; border: 1px solid @border; }
-QPushButton#hotkeyRecorder[recording="true"] { background: @accent_soft; color: @accent_text; border: 1px solid @accent; }
-QLineEdit, QSpinBox, QDateTimeEdit, QTextEdit { background: @surface; color: @text; border: 1px solid @border; border-radius: 7px; padding: 8px 11px; selection-background-color: @selection; }
-QLineEdit { min-height: 20px; }
+QPushButton:disabled { color: @disabled; border-color: @border; background: transparent; }
+
+QPushButton#primaryButton, QPushButton#btnPause {
+    background: @ink_fill; color: @on_ink; border: 1px solid @ink_fill;
+    font-weight: 600; padding: 9px 20px;
+}
+QPushButton#primaryButton:hover, QPushButton#btnPause:hover {
+    background: @accent; border-color: @accent;
+}
+QPushButton#primaryButton:pressed, QPushButton#btnPause:pressed { background: @accent_hover; border-color: @accent_hover; }
+QPushButton#primaryButton:disabled, QPushButton#btnPause:disabled {
+    background: transparent; color: @disabled; border-color: @border;
+}
+QPushButton#ghostButton { border-color: transparent; color: @muted; padding: 6px 8px; }
+QPushButton#ghostButton:hover { color: @text; background: transparent; }
+QPushButton#textButton {
+    border: none; color: @muted; padding: 2px 0; font-size: 12px; letter-spacing: 1px; min-height: 18px;
+}
+QPushButton#textButton:hover { color: @accent; background: transparent; }
+QPushButton#btnStop {
+    border-color: @border_strong; color: @muted; padding-left: 18px; padding-right: 18px;
+}
+QPushButton#btnStop:hover { color: @danger; border-color: @danger_border; background: @danger_bg; }
+QPushButton#btnStop:disabled { color: @disabled; border-color: @border; background: transparent; }
+QPushButton#toggleButton { color: @muted; border-color: @border; border-radius: 2px; }
+QPushButton#toggleButton:checked { color: @accent_text; border-color: @accent_border; background: @accent_soft; }
+QPushButton#navArrowButton {
+    padding: 0; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px;
+    border: 1px solid @border; border-radius: 2px; color: @muted;
+}
+QPushButton#navArrowButton:hover { color: @text; border-color: @border_strong; }
+QPushButton.colorBtn { padding: 0; min-width: 0; min-height: 0; border-radius: 16px; }
+QPushButton#hotkeyRecorder {
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    background: @surface; color: @text; border: 1px solid @border_strong; border-radius: 2px;
+    letter-spacing: 1px;
+}
+QPushButton#hotkeyRecorder:hover { background: @hover; }
+QPushButton#hotkeyRecorder[recording="true"] {
+    background: @accent_soft; color: @accent_text; border-color: @accent;
+}
+
+QLineEdit, QSpinBox, QDateTimeEdit, QTextEdit, QComboBox, QDateEdit {
+    background: @input; color: @text;
+    border: 1px solid @border; border-radius: 2px;
+    padding: 8px 10px;
+    selection-background-color: @selection; selection-color: @selection_text;
+}
+QLineEdit { min-height: 18px; }
 QLineEdit, QTextEdit { placeholder-text-color: @placeholder; }
-QLineEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QTextEdit:focus { border-color: @focus; }
+QLineEdit:focus, QSpinBox:focus, QDateTimeEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+    border-color: @focus;
+}
 QLineEdit:disabled, QSpinBox:disabled, QTextEdit:disabled { color: @disabled; border-color: @border; }
-QSpinBox::up-button, QSpinBox::down-button { width: 22px; }
-QDateTimeEdit::drop-down { width: 24px; border: none; }
+QSpinBox::up-button, QSpinBox::down-button { width: 20px; border: none; background: transparent; }
+QDateTimeEdit::drop-down, QDateEdit::drop-down { width: 22px; border: none; background: transparent; }
+QComboBox::drop-down { width: 24px; border: none; background: transparent; }
+QComboBox::down-arrow { image: none; }
+QComboBox QAbstractItemView {
+    background: @surface; color: @text; border: 1px solid @border_strong;
+    selection-background-color: @accent_soft; selection-color: @accent_text;
+    outline: none;
+}
+
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
 QScrollArea#modeScroll { background: transparent; }
-QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: @border_strong; border-radius: 3px; min-height: 30px; }
+QScrollBar:vertical { background: transparent; width: 9px; margin: 2px; }
+QScrollBar::handle:vertical { background: @track; border-radius: 0; min-height: 28px; }
 QScrollBar::handle:vertical:hover { background: @border_strong; }
-QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
-QScrollBar::handle:horizontal { background: @border_strong; border-radius: 3px; min-width: 30px; }
+QScrollBar:horizontal { background: transparent; height: 8px; margin: 2px; }
+QScrollBar::handle:horizontal { background: @track; min-width: 28px; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 
-/* Focus workspace */
-QFrame#timerCard { background: transparent; border: none; border-radius: 14px; }
-QFrame#timerCard QPushButton#primaryButton, QFrame#timerCard QPushButton#btnPause, QFrame#timerCard QPushButton#btnStop { min-height: 26px; }
-QLabel#stateChip { background: @button; color: @muted; border-radius: 5px; padding: 5px 9px; font-size: 11px; }
-QLabel#stateChip[active="true"] { background: @accent_soft; color: @accent_text; }
-QLabel#modeLabel { color: @text; font-size: 15px; min-height: 24px; }
-QLabel#timerLabel { font-family: "Cascadia Mono", "Consolas", monospace; font-size: 72px; font-weight: 400; color: @title; padding: 0; }
-QLabel#statusLabel { color: @muted; font-size: 12px; }
-QLabel#reminderHintLabel { color: @muted; font-size: 11px; }
-QFrame#summaryCard { background: transparent; border: none; }
-QLabel#todayTotal { color: @muted; font-size: 13px; padding-left: 6px; }
-QWidget[class="summaryRow"] { background: transparent; }
+/* ---------- focus workspace ---------- */
+QFrame#timerCard { background: transparent; border: none; border-radius: 0; }
+QLabel#stateChip {
+    color: @muted; font-size: 11px; letter-spacing: 2px;
+    border: none; padding: 2px 0;
+}
+QLabel#stateChip[active="true"] { color: @accent; }
+QLabel#modeLabel {
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 12px; letter-spacing: 3px; color: @muted;
+}
+QLabel#timerLabel {
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 86px; font-weight: 400; letter-spacing: -1px;
+    color: @title; padding: 0;
+}
+QLabel#statusLabel { color: @muted; font-size: 12px; letter-spacing: 1px; }
+QLabel#reminderHintLabel { color: @muted; font-size: 11px; letter-spacing: 1px; }
+QLabel#todayTotal {
+    font-family: "Songti SC", "SimSun", serif;
+    font-size: 46px; font-weight: 700; color: @title;
+}
+QLabel#todayUnit { color: @muted; font-size: 12px; letter-spacing: 2px; }
 
-/* Tabs and settings */
-QTabWidget::pane { border: none; border-top: 1px solid @border; top: 0; }
-QTabBar::tab { color: @muted; background: transparent; border: none; border-bottom: 2px solid transparent; padding: 12px 16px; margin-right: 4px; font-size: 13px; }
-QTabBar::tab:selected { color: @accent_text; border-bottom: 2px solid @accent; font-weight: 600; }
-QTabBar::tab:hover:!selected { color: @text; background: @surface_alt; }
-QTabBar::tab:focus { background: @accent_soft; }
-QFrame#settingsCard { background: @surface; border: 1px solid @border; border-radius: 10px; }
-QLabel[class="settingsTitle"] { font-size: 17px; font-weight: 600; color: @title; }
-QLabel[class="fieldLabel"] { color: @text; font-size: 12px; }
-QFrame#passwordPanel { background: transparent; border: none; }
+/* mode pills in the dock */
+QPushButton.modeBtn {
+    background: transparent; color: @muted;
+    border: none; border-radius: 99px;
+    padding: 8px 16px; font-size: 12.5px; letter-spacing: 1px; min-height: 16px;
+}
+QPushButton.modeBtn:hover { color: @text; background: @hover; }
+QPushButton.modeBtn:checked {
+    color: @pill_text; font-weight: 600;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 @pill_from, stop:0.55 @pill_from, stop:0.55 @pill_to, stop:1 @pill_to);
+}
+QPushButton.modeBtn:focus { border: 1px solid @accent_border; }
+QPushButton#dockAdd {
+    border: none; color: @muted; padding: 6px 10px; font-size: 15px; border-radius: 99px;
+}
+QPushButton#dockAdd:hover { color: @accent; background: transparent; }
 
-/* History */
-QLabel#dateLabel { color: @text; font-size: 15px; font-weight: 600; }
-QLabel#summaryTotalLabel { color: @title; font-size: 22px; font-weight: 600; padding: 12px 0; }
-QFrame#periodCard { background: @surface; border: 1px solid @border; border-radius: 10px; }
-QFrame#taskStatsSummary { background: @surface; border: 1px solid @border; border-radius: 10px; }
-QLabel#taskMetricValue { color: @title; font-size: 21px; font-weight: 600; padding: 4px 0; }
-QLabel#taskStatsStatus { color: @muted; font-size: 12px; }
-QProgressBar#taskPeriodBar { background: @track; border: none; border-radius: 2px; }
-QProgressBar#taskPeriodBar::chunk { background: @accent; border-radius: 2px; }
-QComboBox { background: @surface; color: @text; border: 1px solid @border; border-radius: 7px; padding: 8px 28px 8px 11px; min-height: 20px; }
-QComboBox:focus { border-color: @focus; }
-QComboBox:disabled { color: @disabled; background: @pressed; }
-QComboBox::drop-down { width: 24px; border: none; }
-QComboBox::down-arrow { image: none; }
-QComboBox QAbstractItemView { background: @surface; color: @text; selection-background-color: @accent_soft; selection-color: @title; border: 1px solid @border; }
-QLabel[class="periodTitle"] { color: @text; font-size: 14px; font-weight: 600; }
-QLabel[class="periodRange"] { color: @muted; font-size: 11px; }
-QLabel#periodTotalLabel { color: @title; font-size: 24px; font-weight: 500; padding: 10px 0; }
-QWidget[class="periodModeRow"] { background: transparent; }
+/* ---------- settings ---------- */
+QTabWidget::pane { border: none; }
+QTabBar::tab {
+    color: @muted; background: transparent; border: none;
+    border-bottom: 1.5px solid transparent; padding: 8px 2px; margin-right: 24px;
+    font-size: 13px; letter-spacing: 2px;
+}
+QTabBar::tab:selected { color: @text; border-bottom: 1.5px solid @accent; }
+QTabBar::tab:hover:!selected { color: @text; }
+QTabBar::tab:focus { background: transparent; }
+
+QFrame#settingsCard, QFrame#passwordPanel {
+    background: transparent; border: none; border-top: 1px solid @rule_soft;
+    border-radius: 0;
+}
+QFrame#settingsCard QLabel[class="sectionTitle"] { font-size: 13px; letter-spacing: 1px; }
+
+/* ---------- history ---------- */
+QLabel#dateLabel {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 20px; font-weight: 700; letter-spacing: 2px;
+}
+QLabel#summaryTotalLabel {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 34px; font-weight: 700; padding: 10px 0; letter-spacing: 1px;
+}
+QFrame#periodCard, QFrame#taskStatsSummary {
+    background: transparent; border: none; border-top: 1px solid @rule; border-radius: 0;
+}
+QLabel#periodTotalLabel {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 26px; font-weight: 700; padding: 6px 0;
+}
+QLabel[class="periodTitle"] { color: @text; font-size: 13px; font-weight: 600; letter-spacing: 2px; }
+QLabel[class="periodRange"] { color: @muted; font-size: 11px; letter-spacing: 1px; }
 QLabel[class="periodModeName"] { color: @text; font-size: 12px; }
-QTableWidget, QTableView { background: @surface; alternate-background-color: @surface_alt; border: 1px solid @border; border-radius: 8px; gridline-color: @hover; selection-background-color: @accent_soft; selection-color: @title; outline: none; }
-QTableWidget::item, QTableView::item { padding: 10px 12px; border: none; }
-QTableWidget::item:selected, QTableView::item:selected { background: @accent_soft; color: @title; }
-QHeaderView { background: @surface; }
-QHeaderView::section { background: @surface; color: @muted; padding: 11px 12px; border: none; border-bottom: 1px solid @border; font-size: 12px; font-weight: 500; }
-QTableCornerButton::section { background: @surface; border: none; }
-QFrame#historyManageHeader { background: transparent; border: none; }
-QLabel#historyManageTitle { font-size: 17px; font-weight: 600; }
-QLabel#historyManageHint { color: @muted; font-size: 12px; }
-QFrame#historyManageSummaryCard { background: @surface; border: 1px solid @border; border-radius: 10px; }
-QLabel#historyManageSummaryTitle, QLabel#historyManageModesTitle { font-size: 13px; font-weight: 600; }
-QLabel#historyManageTotalLabel { color: @text; font-size: 30px; font-weight: 500; }
-QWidget[class="historyManageModeRow"] { background: @surface_alt; border-radius: 6px; }
-QLabel[class="historyManageModeName"], QLabel[class="historyManageModeDuration"] { font-size: 13px; }
-QLabel#historyManageEmpty { color: @muted; padding: 24px 8px; }
-QPushButton#deleteRecordsButton { color: @danger; background: @danger_bg; border: 1px solid @danger_border; font-weight: 500; }
-QPushButton#deleteRecordsButton:hover { color: @danger; background: @danger_hover; border-color: @danger_border; }
-QPushButton#deleteRecordsButton:disabled { color: @disabled; background: @pressed; border-color: @hover; }
+QLabel#taskMetricValue {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 22px; font-weight: 700; padding: 3px 0;
+}
+QLabel#taskStatsStatus { color: @muted; font-size: 11px; }
+QProgressBar#taskPeriodBar { background: @track; border: none; border-radius: 0; }
+QProgressBar#taskPeriodBar::chunk { background: @accent; }
 
-/* Calendar must override table cell padding for compact, usable dates. */
+QTableWidget, QTableView {
+    background: transparent; alternate-background-color: transparent;
+    border: none; border-top: 1px solid @rule;
+    gridline-color: transparent;
+    selection-background-color: @accent_soft; selection-color: @text;
+    outline: none;
+}
+QTableWidget::item, QTableView::item { padding: 9px 10px; border: none; border-bottom: 1px solid @rule_soft; }
+QTableWidget::item:selected, QTableView::item:selected { background: @accent_soft; color: @text; }
+QHeaderView { background: transparent; }
+QHeaderView::section {
+    background: transparent; color: @muted;
+    padding: 8px 10px; border: none; border-bottom: 1px solid @rule;
+    font-size: 11px; font-weight: 500; letter-spacing: 1.6px;
+}
+QTableCornerButton::section { background: transparent; border: none; }
+
+QFrame#historyManageHeader { background: transparent; border: none; }
+QLabel#historyManageTitle {
+    font-family: "Songti SC", "SimSun", serif;
+    font-size: 21px; font-weight: 700; letter-spacing: 2px;
+}
+QLabel#historyManageHint { color: @muted; font-size: 12px; }
+QFrame#historyManageSummaryCard {
+    background: transparent; border: none; border-top: 1px solid @rule; border-radius: 0;
+}
+QLabel#historyManageSummaryTitle, QLabel#historyManageModesTitle {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.6px; color: @muted;
+}
+QLabel#historyManageTotalLabel {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 34px; font-weight: 700;
+}
+QWidget[class="historyManageModeRow"] { background: transparent; border-top: 1px solid @rule_soft; }
+QLabel[class="historyManageModeName"], QLabel[class="historyManageModeDuration"] { font-size: 12px; }
+QLabel#historyManageEmpty { color: @muted; padding: 20px 4px; }
+QPushButton#deleteRecordsButton { color: @danger; border-color: @danger_border; }
+QPushButton#deleteRecordsButton:hover { background: @danger_bg; border-color: @danger_border; }
+QPushButton#deleteRecordsButton:disabled { color: @disabled; border-color: @border; background: transparent; }
+
+/* ---------- calendar & menus ---------- */
 QCalendarWidget { background: @surface; color: @text; }
-QCalendarWidget QWidget#qt_calendar_navigationbar { background: @button; }
+QCalendarWidget QWidget#qt_calendar_navigationbar { background: @surface_alt; }
 QCalendarWidget QToolButton { color: @text; background: transparent; padding: 6px; border: none; }
-QCalendarWidget QSpinBox { padding: 0; min-width: 60px; }
-QCalendarWidget QAbstractItemView { background: @surface; selection-background-color: @selection; selection-color: @selection_text; outline: none; }
+QCalendarWidget QSpinBox { padding: 0; min-width: 60px; border: none; }
+QCalendarWidget QAbstractItemView {
+    background: @surface; selection-background-color: @accent; selection-color: @on_accent; outline: none;
+}
 QCalendarWidget QAbstractItemView::item { padding: 0; margin: 0; border: none; }
 QCalendarWidget QAbstractItemView:disabled { color: @disabled; }
-QMenu { background: @surface; border: 1px solid @border_strong; padding: 5px; }
-QMenu::item { padding: 7px 22px; border-radius: 4px; }
-QMenu::item:selected { background: @selection; color: @selection_text; }
-QMessageBox, QColorDialog, QDialog { background: @surface; }
+QMenu { background: @surface; border: 1px solid @border_strong; padding: 4px; }
+QMenu::item { padding: 7px 20px; border-radius: 0; }
+QMenu::item:selected { background: @accent_soft; color: @accent_text; }
 QMessageBox QLabel { color: @text; }
-QMessageBox QPushButton { min-width: 70px; }
+QMessageBox QPushButton { min-width: 68px; }
 
-/* Login */
-QFrame#loginStory { background: transparent; border: none; border-radius: 14px; }
-QLabel#loginStoryTitle { font-size: 36px; font-weight: 500; color: @hero_text; }
-QLabel#loginStoryCopy { color: @hero_muted; font-size: 14px; }
-QLabel#loginStoryFoot { color: @hero_muted; font-size: 12px; }
+/* ---------- login ---------- */
+QFrame#loginStory {
+    background: transparent; border: none; border-radius: 0;
+    border-left: 2px solid @accent;
+}
+QFrame#loginStory QWidget { background: transparent; }
+QLabel#loginStoryTitle {
+    font-family: "Songti SC", "SimSun", serif;
+    font-size: 40px; font-weight: 700; color: @title; letter-spacing: 3px; line-height: 1.4;
+}
+QLabel#loginStoryCopy { color: @muted; font-size: 13px; }
+QLabel#loginStoryFoot { color: @muted; font-size: 11px; letter-spacing: 2px; }
 QFrame#loginCard { background: transparent; border: none; }
-QLabel#titleLabel { color: @title; font-size: 26px; font-weight: 600; }
-QLabel#loginBrand { font-size: 17px; font-weight: 600; }
+QLabel#titleLabel {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 30px; font-weight: 700; letter-spacing: 3px;
+}
+QLabel#loginBrand { font-size: 12px; font-weight: 600; letter-spacing: 4px; }
 
-/* Quiet, persistent break reminder */
+/* ---------- break reminder ---------- */
 QWidget#breakReminderWindow { background: transparent; }
-QFrame#breakReminderCard { background: transparent; border: none; border-radius: 14px; }
-QLabel#reminderStatusDot { color: @accent; font-size: 10px; }
-QLabel#reminderEyebrow { color: @text; font-size: 13px; font-weight: 500; }
-QLabel#reminderModeChip { background: @accent_soft; color: @accent_text; border: none; border-radius: 5px; padding: 4px 9px; font-size: 12px; }
-QFrame#reminderTimeBlock { background: @accent_soft; border: none; border-radius: 10px; }
-QLabel#reminderMinutes { font-family: "Cascadia Mono", "Consolas", monospace; color: @accent_text; font-size: 32px; font-weight: 500; }
-QLabel#reminderUnit { color: @accent_text; font-size: 12px; }
-QLabel#reminderTitle { color: @title; font-size: 21px; font-weight: 600; }
-QLabel#reminderMessage { color: @text; font-size: 13px; }
-QLabel#reminderMeta { color: @muted; font-size: 11px; }
-QFrame#reminderRule { background: @border; border: none; }
-QPushButton#reminderAcknowledgeButton { background: @accent; color: @on_accent; border: 1px solid @accent; border-radius: 6px; font-weight: 600; padding: 0; min-height: 32px; max-height: 32px; min-width: 90px; max-width: 90px; }
-QPushButton#reminderAcknowledgeButton:hover { background: @accent_hover; }
+QFrame#breakReminderCard { background: transparent; border: none; border-radius: 0; }
+QLabel#reminderStatusDot { color: @accent; font-size: 8px; }
+QLabel#reminderEyebrow { color: @muted; font-size: 11px; font-weight: 500; letter-spacing: 2.4px; }
+QLabel#reminderModeChip {
+    border: 1px solid @accent_border; color: @accent_text;
+    border-radius: 2px; padding: 3px 8px; font-size: 11px; letter-spacing: 1px;
+}
+QFrame#reminderTimeBlock { background: transparent; border: 1px solid @rule; border-radius: 2px; }
+QLabel#reminderMinutes {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 34px; font-weight: 700;
+}
+QLabel#reminderUnit { color: @muted; font-size: 11px; letter-spacing: 2px; }
+QLabel#reminderTitle {
+    font-family: "Songti SC", "SimSun", serif;
+    color: @title; font-size: 22px; font-weight: 700; letter-spacing: 2px;
+}
+QLabel#reminderMessage { color: @text; font-size: 12px; }
+QLabel#reminderMeta { color: @muted; font-size: 11px; letter-spacing: 1px; }
+QFrame#reminderRule { background: @rule; border: none; }
+QPushButton#reminderAcknowledgeButton {
+    background: @ink_fill; color: @on_ink; border: 1px solid @ink_fill;
+    border-radius: 2px; font-weight: 600; padding: 0; letter-spacing: 2px;
+    min-height: 32px; max-height: 32px; min-width: 90px; max-width: 90px;
+}
+QPushButton#reminderAcknowledgeButton:hover { background: @accent; border-color: @accent; }
 
-/* Accent chooser: swatches keep their own preset color. */
-QPushButton.themeChoice { text-align: left; background: @surface; color: @text; border: 1px solid @border; border-radius: 8px; padding: 12px 16px; min-height: 34px; }
-QPushButton.themeChoice:hover { background: @button; border-color: @border_strong; }
-QPushButton.themeChoice:checked { background: @accent_soft; color: @accent_text; border: 1px solid @accent; font-weight: 600; }
-QPushButton.themeChoice:focus { border: 1px solid @focus; }
-QLabel#themeSaveStatus { color: @accent_text; font-size: 12px; padding: 8px 0; }
+/* ---------- appearance ---------- */
+QPushButton.themeChoice {
+    text-align: left; background: transparent; color: @text;
+    border: 1px solid @border; border-radius: 2px; padding: 11px 14px; min-height: 30px;
+    letter-spacing: 1px;
+}
+QPushButton.themeChoice:hover { border-color: @border_strong; background: @hover; }
+QPushButton.themeChoice:checked { border: 1px solid @accent; color: @accent_text; font-weight: 600; }
+QPushButton.themeChoice:focus { border-color: @focus; }
+QLabel#themeSaveStatus { color: @muted; font-size: 12px; padding: 6px 0; letter-spacing: 1px; }
 QLabel#themeSource { color: @muted; font-size: 12px; }
+QPushButton.appearanceMode {
+    background: transparent; color: @text; border: 1px solid @border;
+    border-radius: 2px; text-align: left; padding: 12px 16px; min-height: 20px; letter-spacing: 1px;
+}
+QPushButton.appearanceMode:hover { background: @hover; border-color: @border_strong; }
+QPushButton.appearanceMode:checked { border-color: @accent; color: @accent_text; font-weight: 600; background: @accent_soft; }
+QLabel#appearanceSectionTitle { color: @muted; font-size: 11px; font-weight: 600; letter-spacing: 1.6px; }
 
-/* Native-looking appearance mode selector. */
-QPushButton.appearanceMode { background: @surface; color: @text; border: 1px solid @border; border-radius: 9px; text-align: left; padding: 13px 18px; min-height: 22px; }
-QPushButton.appearanceMode:hover { background: @surface_alt; border-color: @border_strong; }
-QPushButton.appearanceMode:checked { background: @accent_soft; color: @accent_text; border-color: @accent; font-weight: 600; }
-QPushButton.appearanceMode:focus { border-color: @focus; }
-QLabel#appearanceSectionTitle { color: @title; font-size: 14px; font-weight: 600; }
+/* ---------- dial buttons ---------- */
+QPushButton#dialPrimary {
+    background: @ink_fill; border: 1px solid @ink_fill;
+    border-radius: 36px; padding: 0;
+    min-width: 70px; max-width: 70px; min-height: 70px; max-height: 70px;
+}
+QPushButton#dialPrimary:hover { border: 1px solid @accent; }
+QPushButton#dialPrimary:pressed { background: @accent; border-color: @accent; }
+QPushButton#dialPrimary:disabled { background: transparent; border-color: @border; }
+QPushButton#dialGhost {
+    background: transparent; border: 1px solid @border_strong;
+    border-radius: 26px; padding: 0;
+    min-width: 50px; max-width: 50px; min-height: 50px; max-height: 50px;
+}
+QPushButton#dialGhost:hover { background: @hover; border-color: @muted; }
+QPushButton#dialGhost:pressed { background: @pressed; }
+QPushButton#dialGhost:disabled { border-color: @border; }
+
+/* ---------- view switch ---------- */
+QPushButton#viewSwitch {
+    border: none; border-bottom: 1.5px solid transparent;
+    padding: 5px 2px; margin-right: 18px;
+    color: @muted; font-size: 13px; letter-spacing: 2px; border-radius: 0;
+}
+QPushButton#viewSwitch:hover { color: @text; background: transparent; }
+QPushButton#viewSwitch:checked { color: @text; border-bottom: 1.5px solid @accent; font-weight: 600; }

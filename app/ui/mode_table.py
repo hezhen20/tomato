@@ -53,11 +53,16 @@ class ModeTableModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.HEADERS)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
+        if role == Qt.TextAlignmentRole and orientation == Qt.Horizontal:
+            return int(Qt.AlignLeft | Qt.AlignVCenter)
         if role != Qt.DisplayRole or orientation != Qt.Horizontal:
             return None
         if 0 <= section < len(self.HEADERS):
             return self.HEADERS[section]
         return None
+
+    def headerAlignment(self, section: int):
+        return Qt.AlignLeft | Qt.AlignVCenter
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
         if not index.isValid() or not (0 <= index.row() < len(self._modes)):
@@ -105,7 +110,7 @@ class ModeTableDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option, index) -> QSize:
         base = super().sizeHint(option, index)
-        return QSize(base.width(), max(44, base.height(), 44))
+        return QSize(base.width(), max(38, base.height(), 38))
 
     def paint(self, painter: QPainter, option, index):
         if index.column() == 1:
@@ -120,12 +125,14 @@ class ModeTableDelegate(QStyledItemDelegate):
         color = QColor(index.data(Qt.DisplayRole) or "#A8B3C7")
         if not color.isValid():
             color = QColor("#A8B3C7")
-        rect = option.rect.adjusted(10, 8, -10, -8)
+        diameter = 13
+        center_y = option.rect.center().y()
+        rect = QRect(option.rect.left() + 12, center_y - diameter // 2, diameter, diameter)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(QColor(theme_colors()["border_strong"]), 1))
         painter.setBrush(color)
-        painter.drawRoundedRect(rect, 8, 8)
+        painter.drawEllipse(rect)
         painter.restore()
 
     def _paint_actions(self, painter, option, index):
@@ -141,15 +148,15 @@ class ModeTableDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
         colors = current_theme().colors
-        self._draw_button(painter, edit_rect, self.ACTION_EDIT, colors["accent_soft"], colors["accent_text"])
-        self._draw_button(painter, delete_rect, self.ACTION_DELETE, colors["danger_bg"], colors["danger"])
+        self._draw_button(painter, edit_rect, self.ACTION_EDIT, colors["accent_text"])
+        self._draw_button(painter, delete_rect, self.ACTION_DELETE, colors["danger"])
         painter.restore()
 
     @staticmethod
-    def _draw_button(painter, rect, text, fill, foreground):
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(fill))
-        painter.drawRoundedRect(rect, 7, 7)
+    def _draw_button(painter, rect, text, foreground):
+        font = painter.font()
+        font.setPixelSize(11)
+        painter.setFont(font)
         painter.setPen(QColor(foreground))
         painter.drawText(rect, Qt.AlignCenter, text)
 
@@ -195,13 +202,13 @@ class ModeTableView(QTableView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(44)
+        self.verticalHeader().setDefaultSectionSize(38)
         self.horizontalHeader().setStretchLastSection(False)
         self.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         self.setColumnWidth(1, 60)
-        self.setColumnWidth(2, 138)
+        self.setColumnWidth(2, 116)
         self.setMinimumHeight(80)
 
     @property

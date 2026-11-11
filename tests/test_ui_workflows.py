@@ -248,7 +248,9 @@ class UiWorkflowTests(unittest.TestCase):
         window._switch_page(3)
         self.app.processEvents()
         self.assertEqual(window.width(), 760)
-        self.assertEqual(window._nav_bar.width(), 68)
+        # The redesign uses a full-width directory bar instead of a collapsing rail.
+        self.assertEqual(window._nav_bar.width(), 760)
+        self.assertTrue(all(button.isVisible() for button in window._nav_buttons))
         tabs = window._settings_page._tabs
         for index in range(tabs.count()):
             tabs.setCurrentIndex(index)

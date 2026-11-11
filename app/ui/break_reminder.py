@@ -37,7 +37,7 @@ class BreakReminderToast(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        card = FrostedSurface()
+        card = FrostedSurface(radius=4)
         card.setObjectName("breakReminderCard")
         outer.addWidget(card)
 

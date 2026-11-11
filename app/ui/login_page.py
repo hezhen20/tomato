@@ -7,7 +7,7 @@ from PySide6.QtCore import Signal, Qt
 from app.database import user_exists, create_user, verify_user
 from app.ui.components import logo, icon, set_feedback
 from app.ui.theme import current_theme
-from app.ui.materials import FrostedSurface
+
 
 
 class LoginPage(QWidget):
@@ -22,7 +22,7 @@ class LoginPage(QWidget):
         layout = QHBoxLayout(self)
         layout.setSpacing(40)
         layout.setContentsMargins(32, 32, 48, 32)
-        self._story = FrostedSurface(variant="hero")
+        self._story = QFrame()
         self._story.setObjectName("loginStory")
         story = QVBoxLayout(self._story)
         story.setContentsMargins(36, 36, 36, 32)

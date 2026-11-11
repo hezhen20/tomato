@@ -1,116 +1,134 @@
-"""In-app frosted materials using Qt's cached blur, tint, texture and highlights.
+"""Paper workspace: warm stock, one soft lamp, static grain.
 
-Material layering references Microsoft's open-source WinUI Gallery / Acrylic:
-https://github.com/microsoft/WinUI-Gallery
-https://learn.microsoft.com/windows/apps/design/style/acrylic
-Only the painted background is blurred; text and controls stay native and sharp.
+The redesign replaces the acrylic stack with a printed sheet: a single base
+colour, a diffuse glow sampled from the accent, and a fixed grain texture.
+Everything is cached per theme so the background costs one blit per repaint.
 """
 from functools import lru_cache
 import random
 import sys
 
 from PySide6.QtCore import QPoint, QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
-from PySide6.QtWidgets import QApplication, QFrame, QGraphicsBlurEffect, QGraphicsScene, QWidget
+from PySide6.QtGui import (
+    QColor, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient,
+)
+from PySide6.QtWidgets import QApplication, QFrame, QWidget
 
 from app.ui.theme import current_mode, current_theme, resolve_theme, theme_colors
 
 
-@lru_cache(maxsize=14)
-def _backdrop(theme_id: str, mode: str) -> QImage:
+@lru_cache(maxsize=16)
+def _paper(theme_id: str, mode: str, width: int = 960, height: int = 720) -> QPixmap:
+    """Pre-render the sheet: stock colour, one lamp, and a faint vignette."""
     colors = resolve_theme(theme_id).colors_for(mode)
-    image = QImage(384, 288, QImage.Format_ARGB32_Premultiplied)
+    image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
     image.fill(QColor(colors["window"]))
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
-    # Diffuse accent illumination gives translucent panels a visible substrate.
-    for x, y, radius, opacity in [(330, 34, 180, 62), (48, 240, 158, 34)]:
-        glow = QRadialGradient(x, y, radius)
-        color = QColor(colors["accent"])
-        color.setAlpha(opacity if mode == "dark" else int(opacity * .72))
-        glow.setColorAt(0, color)
-        color.setAlpha(0)
-        glow.setColorAt(1, color)
-        painter.fillRect(image.rect(), glow)
+
+    lamp = QRadialGradient(width * 0.5, height * 0.42, width * 0.62)
+    glow = QColor(colors["glow"])
+    glow.setAlpha(int(colors["glow_alpha"]))
+    lamp.setColorAt(0.0, glow)
+    glow.setAlpha(0)
+    lamp.setColorAt(0.72, glow)
+    painter.fillRect(image.rect(), lamp)
+
+    if mode == "dark":
+        # Night keeps a lamp-lit centre and lets the corners fall away.
+        falloff = QRadialGradient(width * 0.5, height * 0.44, max(width, height) * 0.74)
+        clear = QColor("#000000")
+        clear.setAlpha(0)
+        deep = QColor("#000000")
+        deep.setAlpha(112)
+        falloff.setColorAt(0.0, clear)
+        falloff.setColorAt(0.58, clear)
+        falloff.setColorAt(1.0, deep)
+        painter.fillRect(image.rect(), falloff)
+    else:
+        edge = QLinearGradient(0, 0, 0, height)
+        shade = QColor("#000000")
+        shade.setAlpha(14)
+        clear = QColor(shade)
+        clear.setAlpha(0)
+        edge.setColorAt(0.0, clear)
+        edge.setColorAt(1.0, shade)
+        painter.fillRect(image.rect(), edge)
     painter.end()
-    scene = QGraphicsScene()
-    scene.setSceneRect(QRectF(image.rect()))
-    item = scene.addPixmap(QPixmap.fromImage(image))
-    blur = QGraphicsBlurEffect()
-    blur.setBlurRadius(18)
-    blur.setBlurHints(QGraphicsBlurEffect.QualityHint)
-    item.setGraphicsEffect(blur)
-    output = QImage(image.size(), image.format())
-    output.fill(QColor(colors["window"]))
-    painter = QPainter(output)
-    scene.render(painter, QRectF(output.rect()), QRectF(image.rect()))
-    painter.end()
-    return output
+    return QPixmap.fromImage(image)
 
 
 @lru_cache(maxsize=2)
 def _grain(mode: str) -> QPixmap:
-    image = QImage(96, 96, QImage.Format_ARGB32_Premultiplied)
+    size = 128
+    image = QImage(size, size, QImage.Format_ARGB32_Premultiplied)
     image.fill(Qt.transparent)
     rng = random.Random(728)
-    for y in range(96):
-        for x in range(96):
-            value = rng.randrange(256)
-            image.setPixelColor(x, y, QColor(value, value, value, 9 if mode == "dark" else 11))
+    alpha = 8 if mode == "dark" else 7
+    tone = 255 if mode == "dark" else 40
+    for y in range(size):
+        for x in range(size):
+            if rng.randrange(100) >= 58:
+                continue
+            value = 255 - abs(rng.randrange(90))
+            color = QColor(tone, tone, tone, alpha)
+            if mode == "light":
+                color = QColor(90, 80, 60, alpha + rng.randrange(4))
+            else:
+                color = QColor(value, value, value, alpha + rng.randrange(3))
+            image.setPixelColor(x, y, color)
     return QPixmap.fromImage(image)
 
 
-class MaterialWorkspace(QWidget):
-    """Stable background sampling coordinates for all in-app acrylic panes."""
+class PaperWorkspace(QWidget):
+    """The sheet everything is printed on."""
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        painter.drawImage(QRectF(self.rect()), _backdrop(current_theme().id, current_mode()))
-        painter.setOpacity(.35)
+        painter.drawPixmap(
+            self.rect(), _paper(current_theme().id, current_mode()),
+        )
+        painter.setOpacity(0.55 if current_mode() == "dark" else 0.75)
         painter.drawTiledPixmap(self.rect(), _grain(current_mode()))
 
 
-def paint_frosted(painter: QPainter, widget: QWidget, radius: int = 14, variant: str = "panel"):
-    """Draw a blurred substrate, a high-opacity tint, grain, and a lit rim."""
+# Kept for compatibility with older imports.
+MaterialWorkspace = PaperWorkspace
+
+
+def paint_surface(painter: QPainter, widget: QWidget, radius: int = 14,
+                  variant: str = "panel", opacity: int = 216):
+    """A sheet panel: translucent stock, hairline rule, no blur."""
     colors = theme_colors()
     rect = QRectF(widget.rect()).adjusted(.5, .5, -.5, -.5)
     path = QPainterPath()
     path.addRoundedRect(rect, radius, radius)
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setRenderHint(QPainter.SmoothPixmapTransform)
-    painter.setClipPath(path)
-    workspace = widget.parentWidget()
-    while workspace is not None and not isinstance(workspace, MaterialWorkspace):
-        workspace = workspace.parentWidget()
-    if workspace is None:
-        painter.drawImage(rect, _backdrop(current_theme().id, current_mode()))
-    else:
-        position = widget.mapTo(workspace, QPoint(0, 0))
-        painter.drawImage(QRectF(-position.x(), -position.y(), workspace.width(), workspace.height()),
-                          _backdrop(current_theme().id, current_mode()))
-    tint = QColor(colors["sidebar"] if variant == "sidebar" else colors["surface"])
-    tint.setAlpha(170 if variant == "hero" else 188 if variant == "sidebar" else 176)
+
+    tint = QColor(colors["surface"])
+    tint.setAlpha(242 if variant == "solid" else opacity)
     painter.fillPath(path, tint)
-    light = QLinearGradient(rect.topLeft(), rect.bottomRight())
-    top = QColor("#FFFFFF")
-    top.setAlpha(13 if current_mode() == "dark" else 110)
-    clear = QColor(top)
+
+    wash = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+    sheen = QColor("#FFFFFF")
+    sheen.setAlpha(28 if current_mode() == "light" else 16)
+    clear = QColor(sheen)
     clear.setAlpha(0)
-    light.setColorAt(0, top)
-    light.setColorAt(.65, clear)
-    painter.fillPath(path, light)
-    painter.setOpacity(.65)
-    painter.drawTiledPixmap(widget.rect(), _grain(current_mode()))
-    painter.setOpacity(1)
-    painter.setClipping(False)
-    edge = QLinearGradient(rect.topLeft(), rect.bottomRight())
-    edge.setColorAt(0, QColor(colors["glass_edge"]))
-    edge.setColorAt(1, QColor(colors["border"]))
-    painter.setPen(QPen(edge, 1))
+    wash.setColorAt(0.0, sheen)
+    wash.setColorAt(1.0, clear)
+    painter.fillPath(path, wash)
+
+    painter.setPen(QPen(QColor(colors["border"]), 1))
     painter.setBrush(Qt.NoBrush)
     painter.drawPath(path)
     painter.restore()
+
+
+def paint_frosted(painter: QPainter, widget: QWidget, radius: int = 14, variant: str = "panel"):
+    """Compatibility shim for the floating chip and reminder toast."""
+    paint_surface(painter, widget, radius, variant, opacity=236)
 
 
 class FrostedSurface(QFrame):
@@ -121,7 +139,11 @@ class FrostedSurface(QFrame):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        paint_frosted(painter, self, self._radius, self._variant)
+        paint_surface(painter, self, self._radius, self._variant)
+
+
+class PaperSurface(FrostedSurface):
+    """Named alias for the redesign's opaque panels."""
 
 
 def update_native_chrome(window: QWidget) -> bool:

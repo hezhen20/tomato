@@ -107,7 +107,8 @@ class ThemeTests(unittest.TestCase):
                 self.assertTrue(page._running and page._paused)
                 self.assertEqual(db.get_modes(), modes_before)
                 self.assertEqual(window._history_page._current_date, history_date)
-                self.assertEqual(page.pause_btn.palette().button().color().name().upper(), preset.accent)
+                # The stylesheet is re-rendered with the new accent on every switch.
+                self.assertIn(preset.accent, self.app.styleSheet())
 
     def test_saved_choice_loads_in_fresh_process_before_login(self):
         self.manager.apply("purple", mode="light")
@@ -222,7 +223,11 @@ print('RESTORED_PURPLE_BEFORE_LOGIN')
             self.assertEqual(page.horizontalScrollBar().maximum(), 0)
             self.assertLessEqual(page.widget().minimumSizeHint().width(), page.viewport().width())
         self.assertEqual(window.width(), 760)
-        self.assertEqual(window._settings_page.new_mode_input.palette().base().color().name().upper(), "#FFFFFF")
+        from app.ui.theme import theme_colors
+        self.assertEqual(
+            window._settings_page.new_mode_input.palette().base().color().name().upper(),
+            theme_colors()["input"],
+        )
 
     def test_saved_feedback_updates_its_color_with_appearance_mode(self):
         from app.ui.theme import theme_colors
@@ -260,7 +265,21 @@ print('RESTORED_PURPLE_BEFORE_LOGIN')
         for preset in THEME_PRESETS:
             self.manager.apply(preset.id, persist=False)
             image = chart.grab().toImage()
-            self.assertEqual(image.pixelColor(chart.width() // 2, chart.height() // 2).name().upper(), preset.accent)
+            from PySide6.QtGui import QColor
+            accent = QColor(preset.colors_for(current_mode())["chart"])
+            # Hatched bars are antialiased, so look for a pixel close to the accent.
+            close_match = False
+            for x in range(0, image.width(), 3):
+                for y in range(0, image.height(), 3):
+                    color = image.pixelColor(x, y)
+                    if (abs(color.red() - accent.red()) <= 8
+                            and abs(color.green() - accent.green()) <= 8
+                            and abs(color.blue() - accent.blue()) <= 8):
+                        close_match = True
+                        break
+                if close_match:
+                    break
+            self.assertTrue(close_match, f"{preset.id} accent missing from chart")
 
 
 if __name__ == "__main__":

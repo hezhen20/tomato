@@ -51,7 +51,7 @@ class FloatingBall(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        paint_frosted(painter, self, 11)
+        paint_frosted(painter, self, 10)
         font = QFont()
         font.setFamilies(["Segoe UI", "Microsoft YaHei UI", "PingFang SC"])
         font.setPointSize(9)

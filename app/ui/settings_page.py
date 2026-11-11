@@ -41,7 +41,7 @@ from app.database import (
 from app.hotkeys import MODE_ACTION_PREFIX, mode_action_name
 from app.ui.colors import color_swatch_style
 from app.ui.mode_table import ModeTableView
-from app.ui.components import icon, page_header, scroll_page, ElidedLabel, swatch_icon, set_feedback
+from app.ui.components import icon, page_header, scroll_page, ElidedLabel, swatch_icon, set_feedback, IndexButton
 from app.ui.theme import THEME_PRESETS, current_theme, current_mode, theme_manager, theme_colors
 
 _KEY_NAMES = {
@@ -214,12 +214,37 @@ class SettingsPage(QWidget):
         self._hotkey_manager.sync_mode_hotkeys()
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        layout.setContentsMargins(32, 28, 32, 24)
-        layout.addWidget(page_header("偏好设置", "让工具适应你，找到自己的工作节奏。"))
+        layout.setSpacing(0)
+        layout.setContentsMargins(44, 22, 44, 22)
+        layout.addWidget(page_header("偏好设置", "让工具适应你，而不是反过来。"))
+
+        body = QHBoxLayout()
+        body.setSpacing(44)
+        body.setContentsMargins(0, 16, 0, 0)
+
+        index = QWidget()
+        index.setFixedWidth(176)
+        index_layout = QVBoxLayout(index)
+        index_layout.setContentsMargins(0, 4, 0, 0)
+        index_layout.setSpacing(2)
+        self._index_buttons = []
+        for offset, title in enumerate(
+            ["模式管理", "全局快捷键", "休息提醒", "悬浮窗", "账户安全", "外观"], 1
+        ):
+            button = IndexButton(f"{offset:02d}", title)
+            button.clicked.connect(lambda _, i=offset - 1: self._tabs.setCurrentIndex(i))
+            index_layout.addWidget(button)
+            self._index_buttons.append(button)
+        index_layout.addStretch()
+        foot = QLabel("数据保存在本机\nSQLite · 无云端同步")
+        foot.setProperty("class", "mutedLabel")
+        foot.setStyleSheet("font-size:10px; letter-spacing:1px; line-height:1.7;")
+        index_layout.addWidget(foot)
+        body.addWidget(index)
 
         tabs = QTabWidget()
         self._tabs = tabs
+        tabs.setDocumentMode(True)
         for page, title in [
             (self._build_modes_tab(), "模式管理"),
             (self._build_hotkeys_tab(), "快捷键"),
@@ -228,13 +253,28 @@ class SettingsPage(QWidget):
             (self._build_password_tab(), "账户安全"),
             (self._build_appearance_tab(), "外观"),
         ]:
-            page.layout().setContentsMargins(0, 24, 4, 0)
+            page.layout().setContentsMargins(0, 4, 4, 0)
             tabs.addTab(scroll_page(page), title)
-        tabs.tabBar().setExpanding(False)
-        tabs.tabBar().setElideMode(Qt.ElideNone)
-        layout.addWidget(tabs)
+        tabs.tabBar().hide()
+        tabs.currentChanged.connect(self.sync_index)
+        body.addWidget(tabs, 1)
+        layout.addLayout(body, 1)
+        self.sync_index(0)
         for btn in self.findChildren(QPushButton):
             btn.setCursor(Qt.PointingHandCursor)
+
+    def sync_index(self, index: int):
+        for offset, button in enumerate(getattr(self, "_index_buttons", [])):
+            button.setChecked(offset == index)
+
+    def refresh_theme(self):
+        if hasattr(self, "theme_buttons"):
+            self._sync_theme_selection(current_theme().id)
+        for button in getattr(self, "_index_buttons", []):
+            button.update()
+        if hasattr(self, "modes_table"):
+            self._refresh_modes_table()
+        self.update()
 
     @staticmethod
     def _section_intro(layout, title, description):
@@ -278,7 +318,7 @@ class SettingsPage(QWidget):
         color_title.setObjectName("appearanceSectionTitle")
         layout.addWidget(color_title)
 
-        hint = QLabel("主题色用于按钮、导航、图表和提醒。你创建的模式颜色会继续保留。")
+        hint = QLabel("强调色用于圆环、印章、导航下划线与图表。你创建的模式颜色会继续保留。")
         hint.setProperty("class", "mutedLabel")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -317,7 +357,7 @@ class SettingsPage(QWidget):
         self.theme_source.setOpenExternalLinks(True)
         layout.addWidget(self.theme_source)
 
-        note = QLabel("配色参考 Catppuccin、Dracula 和 Nord；磨砂层次参考 WinUI 的 Acrylic 材质。")
+        note = QLabel("配色参考 Catppuccin、Dracula 和 Nord。界面为纸感底色、发丝线与印章式标记。")
         note.setProperty("class", "mutedLabel")
         note.setWordWrap(True)
         layout.addWidget(note)

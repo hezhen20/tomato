@@ -1,4 +1,9 @@
-"""Persistent accent themes. Product surfaces and user-defined mode colors stay separate."""
+"""Persistent accent themes on a paper-and-ink surface system.
+
+The redesign treats the workspace as a sheet of paper: warm stock, ink text,
+hairline rules and a single vermilion accent. Light mode is daylight paper,
+dark mode is the same sheet at night.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,35 +21,52 @@ from app.ui.colors import contrast_ratio, foreground_for, mix_color, readable_co
 
 
 THEME_SETTING_KEY = "appearance_accent_theme"
-DEFAULT_THEME_ID = "mint"
+DEFAULT_THEME_ID = "vermilion"
 APPEARANCE_SETTING_KEY = "appearance_mode"
-DEFAULT_APPEARANCE_MODE = "dark"
+DEFAULT_APPEARANCE_MODE = "light"
 _current_mode = DEFAULT_APPEARANCE_MODE
 
-# Catppuccin Latte-inspired light surfaces, paired with the established graphite
-# dark surfaces. All content, controls, popups and painter-based UI share roles.
+# Paper stock, ink and rules. Both modes share the same roles so every widget,
+# popup and painter can ask for one vocabulary.
 _SURFACES = {
-    "dark": {
-        "window": "#181B23", "sidebar": "#141820", "surface": "#222630",
-        "surface_alt": "#272C37", "input": "#1C2029", "button": "#2B303B",
-        "hover": "#343B48", "pressed": "#202630", "border": "#3E4655",
-        "border_strong": "#626D7F", "text": "#E8EBF2", "title": "#F4F6FB",
-        "muted": "#A8B1C2", "placeholder": "#A0ABBD", "disabled": "#778397",
-        "track": "#3A4352", "danger": "#ECA5AD", "danger_bg": "#412B34",
-        "danger_hover": "#543440", "danger_border": "#82515F", "success": "#A6DDAF",
-        "glass_tint": "#B6222630", "glass_edge": "#24E6EFFF",
-        "material_highlight": "#8293B0",
-    },
     "light": {
-        "window": "#EFF1F5", "sidebar": "#E6E9EF", "surface": "#FFFFFF",
-        "surface_alt": "#F1F3F8", "input": "#FFFFFF", "button": "#E8ECF3",
-        "hover": "#DCE3EE", "pressed": "#D2DBE8", "border": "#C8CFDD",
-        "border_strong": "#7E8CA4", "text": "#34394C", "title": "#202638",
-        "muted": "#566178", "placeholder": "#606B80", "disabled": "#929BAE",
-        "track": "#D4DBE7", "danger": "#A12F46", "danger_bg": "#FCE9EE",
-        "danger_hover": "#F8D9E2", "danger_border": "#D192A1", "success": "#266A3D",
-        "glass_tint": "#AEFFFFFF", "glass_edge": "#E1FFFFFF",
+        "window": "#F3ECDE", "sidebar": "#EDE4D3", "surface": "#FAF5EA",
+        "surface_alt": "#EEE6D6", "input": "#FBF7EE", "button": "#EDE4D3",
+        "hover": "#E7DCC7", "pressed": "#DED2BA", "border": "#241B1A16",
+        "border_strong": "#381B1A16", "text": "#1B1A16", "title": "#121110",
+        "muted": "#5B5649", "placeholder": "#655F50", "disabled": "#A49C8B",
+        "track": "#DFD3BC", "danger": "#B4352A", "danger_bg": "#F3DAD3",
+        "danger_hover": "#EDCCC3", "danger_border": "#D9A79B", "success": "#4C7A45",
+        "glass_tint": "#CCFBF7EE", "glass_edge": "#59FFFFFF",
         "material_highlight": "#FFFFFF",
+        # paper-specific roles
+        "paper": "#F3ECDE", "paper_hi": "#FAF5EA", "ink": "#1B1A16",
+        "on_ink": "#F6F0E3", "ink_fill": "#1B1A16",
+        "rule": "#331B1A16", "rule_soft": "#1F1B1A16",
+        "amber": "#EFCB78", "amber_soft": "#F4DCA6",
+        "blue": "#3F6BA8", "olive": "#5B7F4A",
+        "glow": "#EFCB78", "glow_alpha": "150",
+    },
+    # Night is the same sheet with the lamp off: a neutral near-black stock with
+    # a faint green cast, cool white ink, and a single accent halo (方向 B · 柔光).
+    "dark": {
+        "window": "#0A0E0D", "sidebar": "#0C110F", "surface": "#111715",
+        "surface_alt": "#17201D", "input": "#0E1413", "button": "#17201D",
+        "hover": "#1B2523", "pressed": "#0C1211", "border": "#22E8F1EC",
+        "border_strong": "#3AE8F1EC", "text": "#E7F0EA", "title": "#F7FCF9",
+        "muted": "#93A29B", "placeholder": "#84948D", "disabled": "#566157",
+        "track": "#1F2A27", "danger": "#E9907E", "danger_bg": "#2A1917",
+        "danger_hover": "#35201D", "danger_border": "#6C3B31", "success": "#7FD8AB",
+        "glass_tint": "#B3111715", "glass_edge": "#1CFFFFFF",
+        "material_highlight": "#E7F0EA",
+        "paper": "#0A0E0D", "paper_hi": "#111715", "ink": "#E7F0EA",
+        "on_ink": "#0A0E0D", "ink_fill": "#E7F0EA",
+        "rule": "#2AE8F1EC", "rule_soft": "#14E8F1EC",
+        "amber": "#8FE9C0", "amber_soft": "#17302A",
+        "blue": "#7FA8DE", "olive": "#8FC7A6",
+        # A cool, nearly colourless lamp: a tinted page wash is what made the old
+        # night mode read as brown. The accent halo lives on the dial instead.
+        "glow": "#7FC9AE", "glow_alpha": "20",
     },
 }
 
@@ -62,18 +84,20 @@ class ThemePreset:
     def colors(self) -> dict[str, str]:
         return self.colors_for(current_mode())
 
-    @lru_cache(maxsize=14)
+    @lru_cache(maxsize=16)
     def colors_for(self, mode: str) -> dict[str, str]:
         mode = mode if mode in _SURFACES else DEFAULT_APPEARANCE_MODE
         roles = _SURFACES[mode]
         accent = self.light_accent if mode == "light" else self.accent
         accent = accent or readable_color(self.accent, roles["surface"])
-        soft = mix_color(accent, roles["surface"], 0.89 if mode == "light" else 0.84)
-        hero = mix_color(accent, roles["window"], 0.89)
+        soft = mix_color(accent, roles["surface"], 0.88 if mode == "light" else 0.84)
+        hero = mix_color(accent, roles["window"], 0.90)
         on_accent = foreground_for(accent)
+
         def variant(target, ratio):
             value = mix_color(accent, target, ratio)
             return value if contrast_ratio(on_accent, value) >= 4.5 else accent
+
         return {
             **roles,
             "accent": accent,
@@ -86,17 +110,27 @@ class ThemePreset:
             "accent_border": mix_color(accent, roles["surface"], 0.35),
             "focus": readable_color(accent, roles["surface"], 3.3),
             "chart": readable_color(accent, roles["window"], 3.3),
-            "selection": mix_color(accent, "#202227", 0.69),
-            "selection_text": "#F4F5F7",
+            "selection": mix_color(accent, "#1B1A16", 0.72),
+            "selection_text": "#F6F2E7",
             "hero_background": hero,
             "hero_text": roles["title"],
             "hero_muted": readable_color(roles["muted"], hero),
+            # Dock pill: daylight keeps the highlighter band, night collapses the
+            # gradient into one soft accent wash (方向 B · 柔光聚焦).
+            "pill_from": "rgba(239, 203, 120, 0)" if mode == "light" else soft,
+            "pill_to": roles["amber"] if mode == "light" else soft,
+            "pill_text": roles["text"] if mode == "light" else readable_color(accent, soft),
+            # Night keeps the sheet neutral and lets only the dial carry the
+            # accent lamp, so the dark surface never drifts toward brown.
+            "dial_glow": roles["glow"] if mode == "light" else accent,
+            "dial_glow_alpha": "58" if mode == "light" else "30",
         }
 
 
-# Exact accent swatches from upstream palettes. Surface/hover roles are adapted
-# for Tomato's graphite workspace, rather than claiming to port the full themes.
+# Accent swatches. Vermilion is the house colour of the paper redesign; the
+# upstream palettes stay available for people who prefer another ink.
 THEME_PRESETS = (
+    ThemePreset("vermilion", "朱砂", "#E2674C", "Tomato 纸感配色", "", "#C1462F"),
     ThemePreset("blue", "明亮蓝", "#89B4FA", "Catppuccin Mocha · Blue",
                 "https://github.com/catppuccin/palette/blob/main/palette.json", "#1E66F5"),
     ThemePreset("purple", "Dracula 紫", "#BD93F9", "Dracula · Purple",
@@ -158,7 +192,7 @@ def application_palette(preset: ThemePreset | None = None) -> QPalette:
         QPalette.Base: colors["input"], QPalette.AlternateBase: colors["surface_alt"],
         QPalette.Text: colors["text"], QPalette.Button: colors["button"],
         QPalette.ButtonText: colors["text"], QPalette.Highlight: colors["selection"],
-        QPalette.HighlightedText: "#F4F5F7", QPalette.ToolTipBase: colors["surface"],
+        QPalette.HighlightedText: colors["selection_text"], QPalette.ToolTipBase: colors["surface"],
         QPalette.ToolTipText: colors["text"], QPalette.PlaceholderText: colors["placeholder"],
         QPalette.Light: colors["border_strong"], QPalette.Midlight: colors["border"],
         QPalette.Mid: colors["border"], QPalette.Dark: colors["pressed"],
