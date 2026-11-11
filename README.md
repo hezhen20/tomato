@@ -6,11 +6,16 @@
 
 ## 界面与外观
 
-界面支持深色与浅色模式、七种强调色和可折叠侧栏，支持从 760 × 620 到更大桌面窗口。侧栏、计时面板、登录页和提醒浮层采用 Acrylic 风格的应用内磨砂材质：模糊底色、细纹理与柔和高光共同提供层次，正文和操作控件保持清晰。
+界面是「纸与光」：一张暖色纸、一支墨、一枚朱砂。没有侧边栏，顶部是一行目录式导航；主页面由一枚居中的刻度圆环、左侧的今日账本和右侧的本周投入组成，模式沉淀为底部一枚悬浮胶囊。
 
-设计参考：[Folo](https://github.com/RSSNext/Folo)、[Kanri](https://github.com/kanriapp/kanri) 的桌面产品布局与低干扰信息层级。图标许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+- 明暗两套纸张：白天是米色纸（`#F3ECDE`），夜里是中性近黑（`#0A0E0D`），同一套颜色令牌互换；暗色只让圆环与模式胶囊带强调色的柔光，底色保持中性不发棕。
+- 字体分工：宋体做标题与数字，Consolas 做所有读数，Segoe UI 做正文。
+- 线条语言：发丝线、点线引导、斜纹柱状图、印章式日期，没有圆角卡片，也没有数据表格。
+- 强调色默认「朱砂」，另有六种上游配色；强调色用于圆环进度、印章、导航下划线与图表。
+- 自绘控件：圆环刻度与进度弧、账本行、斜纹柱状图、印章、编号索引都由 QPainter 绘制，窗口缩放时保持清晰。
+- 布局在 1040px 以下收起左右两列，只保留圆环与模式胶囊，最小支持 760 × 620。
 
-材质层次参考 [微软 WinUI Gallery](https://github.com/microsoft/WinUI-Gallery) 与 [Acrylic 设计说明](https://learn.microsoft.com/windows/apps/design/style/acrylic)，使用 Qt 原生模糊效果并缓存底图；切换主题或窗口重绘时，计时内容保持锐利。
+设计参考：[Folo](https://github.com/RSSNext/Folo)、[Kanri](https://github.com/kanriapp/kanri) 的桌面产品布局与低干扰信息层级，[Catppuccin](https://github.com/catppuccin/palette)、[Dracula](https://github.com/dracula/dracula-theme)、[Nord](https://github.com/nordtheme/nord) 的配色。图标许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 ## 功能特性
 

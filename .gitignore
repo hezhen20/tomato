@@ -47,5 +47,9 @@ logs/
 
 docs/
 
+design/
+
+.workbuddy/
+
 # Local scoring rubric
 JOB_SEARCH_EFFORT_LEVELS.md
