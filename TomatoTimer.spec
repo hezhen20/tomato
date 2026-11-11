@@ -22,6 +22,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='TomatoTimer',
+    icon='assets/app.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
