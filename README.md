@@ -1,256 +1,325 @@
-# Tomato Timer
+<div align="center">
 
-一个轻量的桌面时间追踪工具，用于在工作、学习等不同模式之间快速切换并记录投入时间。应用以本地 SQLite 数据库存储记录，支持全局快捷键、系统托盘、悬浮球、历史统计和自定义模式。
+<img src="assets/icon-256.png" width="88" alt="Tomato Timer">
 
-> 当前主要面向 Windows 桌面使用；macOS / Linux 可运行源码版，但全局快捷键、托盘和打包效果可能因系统权限与桌面环境而异。
+<h1>Tomato Timer</h1>
 
-## 界面与外观
+<p><strong>一张纸，一支墨，一枚朱砂。</strong><br>
+Windows 桌面上的本地专注计时器 —— 每一段投入都记在这台电脑里。</p>
 
-界面是「纸与光」：一张暖色纸、一支墨、一枚朱砂。没有侧边栏，顶部是一行目录式导航；主页面由一枚居中的刻度圆环、左侧的今日账本和右侧的本周投入组成，模式沉淀为底部一枚悬浮胶囊。
+<p>
+<a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
+<a href="https://doc.qt.io/qtforpython-6/"><img src="https://img.shields.io/badge/PySide6-6.x-41CD52?style=flat-square&logo=qt&logoColor=white" alt="PySide6 6.x"></a>
+<img src="https://img.shields.io/badge/Windows_10%2F11-macOS_%C2%B7_Linux-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows 10/11, macOS, Linux">
+<a href="#testing"><img src="https://img.shields.io/badge/tests-98_passing-4C7A45?style=flat-square" alt="98 tests passing"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C1462F?style=flat-square" alt="MIT License"></a>
+</p>
 
-- 明暗两套纸张：白天是米色纸（`#F3ECDE`），夜里是中性近黑（`#0A0E0D`），同一套颜色令牌互换；暗色只让圆环与模式胶囊带强调色的柔光，底色保持中性不发棕。
-- 字体分工：宋体做标题与数字，Consolas 做所有读数，Segoe UI 做正文。
-- 线条语言：发丝线、点线引导、斜纹柱状图、印章式日期，没有圆角卡片，也没有数据表格。
-- 强调色默认「朱砂」，另有六种上游配色；强调色用于圆环进度、印章、导航下划线与图表。
-- 自绘控件：圆环刻度与进度弧、账本行、斜纹柱状图、印章、编号索引都由 QPainter 绘制，窗口缩放时保持清晰。
-- 布局在 1040px 以下收起左右两列，只保留圆环与模式胶囊，最小支持 760 × 620。
+<a href="#quickstart">快速开始</a> ·
+<a href="#manual">使用手册</a> ·
+<a href="#shortcuts">快捷键</a> ·
+<a href="#data">数据与隐私</a> ·
+<a href="#faq">常见问题</a> ·
+<a href="#design">设计与实现</a>
 
-设计参考：[Folo](https://github.com/RSSNext/Folo)、[Kanri](https://github.com/kanriapp/kanri) 的桌面产品布局与低干扰信息层级，[Catppuccin](https://github.com/catppuccin/palette)、[Dracula](https://github.com/dracula/dracula-theme)、[Nord](https://github.com/nordtheme/nord) 的配色。图标许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+</div>
 
-## 功能特性
+<img src="assets/screenshots/focus-light.webp" alt="浅色模式：刻度圆环、今日账本与本周投入" width="100%">
 
-- 多模式计时：默认包含“工作”模式，可在设置页新增、编辑、删除模式。
-- 累积统计：同一天内同一模式的多段计时会自动累积。
-- 统计日口径：一天从 04:00 开始，凌晨 00:00–04:00 仍计入前一天；计时页、日/周/月统计和按任务统计保持一致。
-- 历史记录：支持按日、周、月查看不同模式的投入时长。
-- 任务统计：在「时间统计 → 按任务」选择任务标签（现有专注模式），查看今日、本周、本月、全部记录或自定义日期范围的专注总量、时段占比、趋势和每日明细；主页「任务统计」可直达当前任务。
-- 统计明细：同一天的模式合并日期显示，多模式时增加每日总计与分时段明细。
-- 交互图表：周、月柱状图悬浮显示完整日期、星期和累计时长，并提供高亮与生长动效。
-- 全局快捷键：窗口不在前台时也能暂停、结束或切换模式。
-- 悬浮球：最小化后显示当前计时状态，双击可恢复主窗口。
-- 系统托盘：关闭窗口时默认最小化到托盘，退出时自动保存当前计时。
-- 本地存储：数据保存在用户本机，不依赖云服务。
+<p align="center"><sub>浅色 · 日光纸 —— 中间是今天这一轮专注，左边是今天的账本，右边是本周的投入。</sub></p>
 
-## 项目结构
+## 为什么是 Tomato
 
-```text
-tomato/
-├── app/
-│   ├── database.py          # SQLite 数据库与数据访问
-│   ├── hotkeys.py           # 全局快捷键管理
-│   └── ui/
-│       ├── main_window.py   # 主窗口、导航、托盘
-│       ├── main_page.py     # 计时主页
-│       ├── history_page.py  # 历史统计页
-│       ├── settings_page.py # 设置页
-│       ├── floating_ball.py # 悬浮球
-│       └── style.qss        # 明暗主题与统一控件样式
-├── tests/                   # 核心逻辑测试
-├── dev.py                   # 开发热重载入口
-├── main.py                  # 源码运行入口
-├── main.pyw                 # Windows 无控制台入口
-├── build.bat                # Windows 打包脚本
-├── build.sh                 # macOS / Linux 打包脚本
-├── requirements.txt         # 运行依赖
-└── requirements-dev.txt     # 开发依赖
-```
+市面上的时间追踪器大多在替「团队」记录，Tomato 只替你自己记录。它假设你每天要切换十几次状态，但不想为此打开浏览器、登录账号、看一堆仪表盘。
 
-## 环境要求
+- **本地优先。** 记录写进本机一个 SQLite 文件，没有账号体系、没有同步队列、没有服务端。断网、注销、换 Wi-Fi 都不影响计时。
+- **04:00 才换日。** 凌晨一点的那段专注算「昨天」，符合熬夜写代码或复习的真实作息。计时页、历史统计、按任务统计三处共用同一口径，不会互相打架。
+- **低打扰。** 全局快捷键开始/暂停/结束，最小化后只剩一枚悬浮窗，关窗口即收进托盘。你不需要为了看一眼还剩多久而切换窗口。
+- **看得见的手感。** 界面没有卡片堆叠和仪表盘，只有纸面、发丝线和自绘的刻度圆环。所有图形由 QPainter 画出来，缩放不糊。
 
-- Python 3.10+（本项目开发环境为 Python 3.13）
-- Windows 10/11 推荐
-- 依赖：PySide6、pynput
+## 功能一览
+
+**计时**
+
+- 多模式计时：工作、学习、副业各成一类，随时新增、改名、换色；切换模式会先结清上一段。
+- 累计不丢：同一天同一模式的多段自动相加，每 30 秒自动落盘。
+- 结束不清零：结束只结清本段，当天累计继续留在页面上。
+- 圆环进度：取「本轮连续专注 ÷ 提醒间隔」，暂停或结束时归零。
+
+**统计**
+
+- 按日期：日、周、月、管理四个视图，日期可前后翻页；同一天的模式合并显示，多模式时补每日总计与分时段明细。
+- 按任务：选一个模式标签，看今日、本周、本月、全部记录或自定义区间；给出累计专注、专注天数、专注日均、单日最高、时段占比与趋势。
+- 时段拆分：上午 04:00–12:00、下午 12:00–18:00、晚上 18:00–次日 04:00。跨时段记录按实际秒数拆开，暂停时间不计入。
+- 斜纹柱状图：悬浮显示完整日期、星期与累计时长，带高亮与生长动效。
+
+**桌面集成**
+
+- 全局快捷键：窗口不在前台也能暂停、结束、切换模式。
+- 悬浮窗：可拖动、双击回主窗，还能开启「时间玻璃遮罩」把读数糊住，只留模式与运行状态。
+- 系统托盘：关闭窗口最小化到托盘，退出时自动保存当前段。
+- 工作节奏提醒：到达设定时长后，在屏幕正中弹一张提醒卡，文案可自定义，关闭前一直保留。
+- 单实例：重复启动不会开出第二个窗口，而是聚焦已运行的那个。
+
+**外观**
+
+- 两套纸张：日光纸 `#F3ECDE` 与夜间纸 `#0A0E0D`，同一套颜色令牌互换。
+- 八枚强调色：默认朱砂，另有明亮蓝、Dracula 紫、Nord 冰青、蜜桃橙、玫瑰粉、清新绿、薄荷绿。
+- 自绘控件：刻度圆环、账本行、斜纹柱、印章日期、编号目录都由 QPainter 绘制，1040px 以下自动收起左右两列。
+
+## 界面
+
+<p align="center">
+<img src="assets/screenshots/focus-dark.webp" width="49%" alt="深色模式计时页">
+<img src="assets/screenshots/stats.webp" width="49%" alt="统计页：按日期查看">
+</p>
+
+<p align="center"><sub>夜间纸 —— 底色保持中性，只有圆环带一圈柔光　·　统计 —— 累计、分时段与今日记录</sub></p>
+
+<p align="center">
+<img src="assets/screenshots/focus-compact.webp" width="44%" alt="窄窗口下的计时页">
+</p>
+
+<p align="center"><sub>窄至 880 × 640：左右两列收起，只留圆环与模式胶囊</sub></p>
+
+<a name="quickstart"></a>
 
 ## 快速开始
 
-1. 克隆仓库：
+### 环境要求
 
-   ```bash
-   git clone https://github.com/hezhen20/tomato.git
-   cd tomato
-   ```
+- Python 3.10+（开发环境为 3.13）
+- 依赖：PySide6、pynput
+- Windows 10/11 为主要目标；macOS / Linux 可跑源码版，但托盘、全局快捷键与打包表现受系统权限和桌面环境影响
 
-2. 创建并激活虚拟环境：
+### 从源码运行
 
-   Windows PowerShell：
+```bash
+git clone https://github.com/hezhen20/tomato.git
+cd tomato
+```
 
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+Windows PowerShell：
 
-   macOS / Linux：
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python main.pyw
+```
 
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
+macOS / Linux：
 
-3. 安装依赖：
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+`main.pyw` 与 `main.py` 等价，只是 Windows 下不弹控制台窗口。
 
-4. 启动应用：
+### 首次启动
 
-   ```bash
-   python main.py
-   ```
+输入任意用户名和密码即完成本地注册，之后用同一组凭据登录。密码以加盐 SHA-256 存在本机数据库里，只作轻量入口，不承担高安全等级账户系统的职责。
 
-   Windows 下如果不想显示控制台窗口，也可以运行：
+<a name="manual"></a>
 
-   ```powershell
-   python main.pyw
-   ```
+## 使用手册
 
-   应用只允许一个实例运行。重复启动时不会创建第二个窗口，而会恢复并聚焦已经运行的窗口。
+### 1. 开始一段专注
 
-## 使用说明
+打开应用后有三种方式启动：
 
-### 首次登录
+- 点圆环下方的黑色按钮：没有选中模式时，它会启动列表里的第一个模式。
+- 点底部胶囊里的某个模式：直接以该模式开始。
+- 按该模式绑定的全局快捷键：任何窗口下都能触发。
 
-首次输入任意用户名和密码会自动注册本地用户；之后使用相同用户名和密码登录。密码只保存在本机数据库中。
+计时中，黑色按钮变成暂停，右侧方块按钮用于结束本段。状态文字会明确写出「计时中」「已暂停」「就绪」。
 
-### 计时
+### 2. 管理模式
 
-- 点击“开始”后开始记录当前模式时间。
-- 没有已选模式时，“开始专注”会启动第一个模式；也可以直接点击模式按钮开始。
-- 点击“暂停”可暂停或恢复计时。
-- 点击“结束”会保存当前计时段，但不会清空当天累计显示。
-- 统计日从 04:00 开始：凌晨 00:00–04:00 的计时仍计入前一天，计时页的日期徽标会标注“统计日至 04:00”，与历史统计、任务统计口径一致。
-- 切换模式时，应用会先保存当前模式的本段时间，再开始新模式计时。
-- 使用 `Alt + 1 / 2 / 3` 可以切换专注、统计和设置页面；快捷键录入时优先记录组合键。
+设置 → 模式管理。可以新增、改名、换色、删除。模式颜色会同步到计时页的账本圆点、统计页的明细与悬浮窗状态点。
 
-### 模式管理
+改名不会丢历史：记录挂在模式 ID 上，只换显示名。删除模式会连带删除它的历史记录，操作前请确认。
 
-在设置页可以新增模式、修改模式名称和颜色。模式颜色会用于主页、历史统计和悬浮球状态显示。
+### 3. 查看统计
 
-### 按任务查看统计
+统计页顶部有两组切换：
 
-在「时间统计」切换到「按任务」，选择要查看的任务标签。这里的标签沿用设置中的专注模式，已有记录可直接统计，重命名后仍保留关联。
+- **按日期 / 按任务**：前者看一天或一段时间的整体分布，后者聚焦某一个模式标签。
+- **日 / 周 / 月 / 管理**（按日期下）：管理视图可以按时间范围批量删除记录。
 
-- 范围支持今日、本周、本月、全部记录和自定义起止日期；左右箭头可翻看相邻时段，「回到本期」回到当前日期。
-- 汇总展示累计专注、专注天数、专注日均和单日最高；专注日均只计算有专注记录的日期。
-- 上午为 04:00–12:00，下午为 12:00–18:00，晚上为 18:00–次日 04:00。凌晨 4 点前属于前一天，跨时段记录自动拆分，暂停时间不计入。
-- 趋势图随范围自动按日、周、月或年汇总，空档保留，悬浮可看精确日期与时长。每日明细按日期倒序，双击可回看当天全部任务。
-- 统计读取已保存记录，计时中约每 30 秒自动更新；也可以手动刷新。切换统计范围不会影响计时。
+按任务视图支持今日、本周、本月、全部记录和自定义起止日期，左右箭头翻相邻时段，「回到本期」回到当前日期。统计读取已保存的记录，计时中约每 30 秒刷新一次，也可以手动刷新；切换统计范围不影响正在跑的计时。
 
-### 外观主题
+<a name="shortcuts"></a>
 
-在 **偏好设置 → 外观** 中选择“浅色 · 清透”或“深色 · 静谧”，也可以用侧栏底部的太阳/月亮按钮快速切换。强调色与明暗模式独立选择，点击即生效并自动保存，登录页也会恢复上次的选择。首次使用仍默认深色与原版薄荷绿。
+### 4. 快捷键
 
-| 主题色 | 主色值 | 色板来源 |
+| 操作 | 默认组合 | 说明 |
 | --- | --- | --- |
-| 明亮蓝 | `#89B4FA` | Catppuccin Mocha · Blue |
-| Dracula 紫 | `#BD93F9` | Dracula · Purple |
-| Nord 冰青 | `#88C0D0` | Nord · Frost / nord8 |
-| 蜜桃橙 | `#FAB387` | Catppuccin Mocha · Peach |
-| 玫瑰粉 | `#F5C2E7` | Catppuccin Mocha · Pink |
-| 清新绿 | `#A6E3A1` | Catppuccin Mocha · Green |
-| 原版薄荷绿 | `#A8D5BA` | Tomato 原有配色 |
+| 暂停 / 恢复 | `Ctrl + Alt + P` | 全局生效，窗口不在前台也可以 |
+| 结束当前段 | `Ctrl + Alt + Q` | 结清本段，当天累计不清零 |
+| 切换页面 | `Alt + 1` / `Alt + 2` / `Alt + 3` | 计时 / 统计 / 设置 |
+| 模式快捷键 | 设置 → 全局快捷键 | 每个模式可绑定独立组合键 |
 
-参考上游：[Catppuccin 色板](https://github.com/catppuccin/palette/blob/main/palette.json)、[Dracula 色板](https://github.com/dracula/dracula-theme#color-palette-oss)、[Nord 色板](https://github.com/nordtheme/nord/blob/develop/src/nord.styl)。使用上游强调色并适配本项目的明暗模式、悬停、选中、焦点和原生弹窗配色。浅色使用 Latte/Alucard 或相同色相的可读深色版本；模式原始颜色继续保留，显示时自动适配对比度。
+模式快捷键随状态变化：
 
-### 快捷键
+- 没在计时：按下即开始该模式。
+- 正在该模式计时：按下即暂停 / 恢复。
+- 正在别的模式计时：先结清当前段，再切到目标模式。
 
-默认快捷键：
+录入时先按下修饰键（Ctrl / Alt / Shift）再按主键，`Esc` 取消。如果组合键没反应，通常是已被其他软件占用，换一组并保存即可。
 
-| 操作 | 默认快捷键 |
-| --- | --- |
-| 暂停 / 恢复 | `Ctrl + Alt + P` |
-| 结束当前计时 | `Ctrl + Alt + Q` |
+### 5. 悬浮窗、托盘与提醒
 
-每个模式也可以在设置页绑定独立快捷键：
+- **悬浮窗**：关闭主窗口后出现在桌面上的小窗，可拖动摆放，双击回到主窗口。开启「时间玻璃遮罩」会用高不透明层盖住读数，只保留模式名与运行状态。
+- **托盘**：右键托盘图标可以「显示」或「退出」。退出时会保存当前段，不必先回主窗口结束。
+- **工作节奏提醒**：设置 → 休息提醒。到达间隔后在屏幕正中弹出提醒卡，可自定义文案；「暂停宽限期」内的短暂暂停仍算同一轮，超过则下一轮重新计时。
 
-- 未计时时按模式快捷键：开始该模式。
-- 正在该模式计时时按模式快捷键：暂停 / 恢复。
-- 正在其他模式计时时按模式快捷键：保存当前模式并切换到目标模式。
+### 6. 切换外观
 
-### 托盘与悬浮球
+设置 → 外观，或点导航栏右侧的月亮 / 太阳按钮快速切换明暗。明暗与强调色独立选择，点击即生效并即时保存，下次启动在登录页就会恢复。
 
-- 关闭主窗口会最小化到系统托盘，不会直接退出。
-- 右键托盘图标可以显示窗口或退出应用。
-- 最小化后会显示悬浮球，双击悬浮球恢复窗口。
+<a name="data"></a>
 
-## 数据存储位置
+## 数据与隐私
 
-应用数据默认存储在当前用户的系统数据目录：
+所有记录都存在本机的一个 SQLite 文件里，应用不联网、不上传、不统计。
 
 | 系统 | 路径 |
 | --- | --- |
 | Windows | `%LOCALAPPDATA%\TomatoTimer\tomato.db` |
 | macOS | `~/Library/Application Support/TomatoTimer/tomato.db` |
-| Linux | `$XDG_DATA_HOME/TomatoTimer/tomato.db` 或 `~/.local/share/TomatoTimer/tomato.db` |
+| Linux | `$XDG_DATA_HOME/TomatoTimer/tomato.db`（默认 `~/.local/share/...`） |
 
-注意：数据库中包含本地用户、模式、快捷键配置和时间记录。仓库不会提交这些个人数据。
+- **备份**：复制这个 `tomato.db` 即可；换电脑时放回同一路径就能继续用。
+- **重置**：退出应用后删除该文件，下次启动会重新初始化默认模式。
+- **账号**：本地账户只是入口，密码以加盐哈希存储；应用不做多账号数据隔离，记录属于这台电脑上的同一份库。
 
 ## 打包
 
-### Windows
-
 ```powershell
+# Windows：输出 dist\TomatoTimer\
 .\build.bat
 ```
 
-打包完成后，输出目录为：
+```bash
+# macOS / Linux
+chmod +x build.sh && ./build.sh
+```
+
+打包产物是「文件夹式」应用：把整个 `dist\TomatoTimer\` 复制到另一台同系统的电脑即可运行，不需要安装 Python。图标由 `assets/app.ico` 提供，它会通过 `TomatoTimer.spec` 内嵌进可执行文件；若改动了 `components.py` 里的印章绘制，运行 `python tools/build_app_icon.py` 重新生成。
+
+<a name="design"></a>
+
+## 设计与实现
+
+界面语言是「纸与光」：暖色纸面、墨色正文、发丝线，加一枚朱砂强调色。没有侧边栏、圆角卡片和数据表格，导航是一行目录，数据用点线账本表达。
+
+- `app/ui/theme.py` — 纸墨语义令牌、八枚强调色、明暗两套色板
+- `app/ui/materials.py` — 预渲染纸面（底色、暖光、噪点）并按主题缓存
+- `app/ui/components.py` — `RingDial`、`LedgerRow`、`HatchChart`、`Seal`、`IndexButton` 等自绘控件，以及沙漏印章标识
+- `app/ui/style.qss` — 统一控件状态
+
+更完整的视觉决策（对比度、光学尺寸、字号分工）见 [DESIGN.md](DESIGN.md)。
+
+<details>
+<summary>项目结构</summary>
 
 ```text
-dist\TomatoTimer\
+tomato/
+├── main.py / main.pyw      入口（.pyw 无控制台窗口）
+├── dev.py                  开发热重载入口
+├── TomatoTimer.spec        PyInstaller 配置（内嵌 assets/app.ico）
+├── build.bat / build.sh    打包脚本
+├── assets/
+│   ├── app.ico             应用图标（16–256px 九尺寸）
+│   └── screenshots/        README 截图
+├── tools/
+│   └── build_app_icon.py   重新生成 app.ico
+├── app/
+│   ├── database.py         SQLite 数据层与统计口径
+│   ├── hotkeys.py          pynput 全局快捷键
+│   └── ui/
+│       ├── theme.py        纸墨令牌与强调色
+│       ├── materials.py    纸面底图缓存
+│       ├── components.py   自绘控件与图标
+│       ├── style.qss       统一控件样式
+│       ├── main_window.py  主窗口、导航、托盘
+│       ├── main_page.py    计时主页
+│       ├── history_page.py 统计页
+│       ├── settings_page.py 设置页
+│       ├── floating_ball.py 悬浮窗
+│       └── break_reminder.py 休息提醒
+└── tests/                  unittest 用例
 ```
 
-把整个 `dist\TomatoTimer` 文件夹复制到其他 Windows 电脑即可运行。
+</details>
 
-### macOS / Linux
+<a name="testing"></a>
+
+### 测试
 
 ```bash
-chmod +x build.sh
-./build.sh
+python -m unittest discover -s tests -t .
 ```
 
-不同系统的图形界面、托盘和全局快捷键权限差异较大，如遇到快捷键失效，请先检查系统辅助功能、输入监听或窗口管理权限。
+98 个用例覆盖统计日口径（含 04:00 跨日切分）、自增与自动保存不重复计入、删除记录后重算、主题对比度、快捷键录入优先级、登录注册、窄窗口与长模式名、悬浮窗恢复，以及独立进程中的完整启动与退出。测试使用临时数据库，不会碰正式记录。Qt 用例默认走离屏平台。
 
-## 测试
+需要真实桌面才能验证的部分（系统级快捷键注册、托盘菜单、多屏拖动）仍需人工过一遍。
 
-项目使用 Python 内置的 `unittest`：
-
-```bash
-python -m unittest discover -s tests
-```
-
-测试会使用临时数据库，不会影响正式计时数据。
-
-界面回归测试还覆盖真实 Qt 按钮操作、登录注册、自动保存防重复累计、模式重命名、记录管理、每日图表数据、窄窗口和长模式名、悬浮窗恢复，以及独立进程中的完整启动与退出。Qt 界面测试使用离屏平台；系统级快捷键注册、系统托盘菜单与多屏拖动仍需要在目标系统上人工验证。
-
-## 注意事项
-
-- 当前是本地单机工具，不支持云同步。
-- 密码哈希仅用于本地轻量登录，不适合作为高安全等级账户系统。
-- 全局快捷键可能与其他软件冲突，建议在设置页检查并调整。
-- 如果应用被强制结束，最多可能丢失最近约 30 秒的计时进度。
-- `build/`、`dist/`、`__pycache__/`、本地数据库和虚拟环境等文件不会提交到 Git。
-
-## 开发说明
-
-安装开发依赖：
+### 开发
 
 ```bash
-python -m venv .venv
 pip install -r requirements-dev.txt
-```
-
-使用热重载模式启动：
-
-```bash
 python dev.py
 ```
 
-修改 Python 源码或 QSS 样式后，开发进程会自动结束旧应用并启动新应用。这个机制采用完整进程重启，正在进行但尚未自动保存的最近计时可能丢失，因此热重载只用于开发调试。
+改 Python 或 QSS 后会自动重启应用。它采用整进程重启，未落盘的最近几十秒可能丢失，仅用于调试。
 
-运行测试：
+<a name="faq"></a>
 
-```bash
-python -m unittest discover -s tests
-```
+## 常见问题
 
-新增非代码资源后，如果需要随应用一起打包，请同步更新 `build.bat` 和 `build.sh` 里的 PyInstaller `--add-data` 参数。
+**关了窗口，应用不见了？**
+
+它收进了系统托盘，没有退出。点托盘图标右键「显示」可以召回；右键「退出」才会真正结束并保存。
+
+**凌晨的记录为什么算昨天？**
+
+这是 04:00 统计日口径：`00:00–04:00` 属于前一天的「晚上」。这样熬夜的连续工作不会被零点切成两段。
+
+**快捷键按了没反应？**
+
+先确认在设置页点过「保存快捷键」；再检查是否被其他软件占用。macOS 需要在系统设置里授予辅助功能 / 输入监听权限。
+
+**换电脑怎么迁移？**
+
+复制 `tomato.db` 到新机器同一路径即可，模式和记录一起带走。
+
+**数据会被上传吗？**
+
+不会。应用没有网络请求，也没有账号服务器。
+
+**支持多用户吗？**
+
+可以在登录页用不同用户名进入，但数据不做隔离——它们是同一份本地数据库。
+
+## 致谢
+
+配色参考 [Catppuccin](https://github.com/catppuccin/palette)、[Dracula](https://github.com/dracula/dracula-theme)、[Nord](https://github.com/nordtheme/nord)；布局与信息层级参考 [Folo](https://github.com/RSSNext/Folo)、[Kanri](https://github.com/kanriapp/kanri) 等桌面产品。图标与字体许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## License
+
+[MIT](LICENSE) © 2026 zhen
+
+---
+
+## About
+
+Tomato Timer is a local-first focus timer for the Windows desktop. It records every session into a single SQLite file on your own machine — no account server, no sync, no telemetry.
+
+The interface is built as a sheet of paper: warm stock, ink text, hairline rules and one vermilion accent, drawn entirely with QPainter so nothing blurs when the window scales. A statistical day starts at 04:00, which keeps late-night sessions on the day they belong to, and the same cut-off is shared by the timer, the history page and the per-task statistics.
+
+Global hotkeys, a draggable floating window, tray integration and a break reminder keep the app out of the way while you work. Written in Python with PySide6; `python main.pyw` runs it, `build.bat` packages it.
